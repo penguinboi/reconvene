@@ -27,7 +27,8 @@ async function loadJournal() {
     el.appendChild(div);
     fetch(`/api/recap/${project.name}`)
       .then((r) => r.json())
-      .then((recap) => { metaEl.textContent = recap.oneline; });
+      .then((recap) => { metaEl.textContent = recap.oneline; })
+      .catch((err) => console.error(`Failed to fetch recap for ${project.name}:`, err));
   }
 }
 
