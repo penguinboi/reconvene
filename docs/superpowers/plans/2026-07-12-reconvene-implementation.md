@@ -444,7 +444,7 @@ from tests.conftest import add_session, add_message
 
 
 def test_load_sessions_reads_rows(ccrider_db):
-    add_session(ccrider_db, "s1", "/Users/x/Code/regrade3", "2026-07-08 10:00:00", message_count=42)
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00", message_count=42)
     sessions = load_sessions(str(ccrider_db))
     assert len(sessions) == 1
     assert sessions[0].session_id == "s1"
@@ -462,7 +462,7 @@ def test_probe_schema_raises_on_missing_column(tmp_path):
 
 
 def test_connection_is_read_only(ccrider_db):
-    add_session(ccrider_db, "s1", "/Users/x/Code/regrade3", "2026-07-08 10:00:00")
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00")
     load_sessions(str(ccrider_db))  # must not raise or lock the file
     # a second independent connection must still be able to write (proves the
     # read-only connection didn't hold a lock)
@@ -473,7 +473,7 @@ def test_connection_is_read_only(ccrider_db):
 
 
 def test_session_messages_orders_and_skips_sidechain(ccrider_db):
-    add_session(ccrider_db, "s1", "/Users/x/Code/regrade3", "2026-07-08 10:00:00")
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00")
     add_message(ccrider_db, "s1", "assistant", "hi", sequence=1)
     add_message(ccrider_db, "s1", "user", "do the sensor task", sequence=2)
     add_message(ccrider_db, "s1", "user", "side note", sequence=3, is_sidechain=1)
@@ -601,10 +601,10 @@ from reconvene.config import Config
 
 
 def test_canonical_folds_worktree_and_case():
-    assert canonical_name("/Users/x/Code/curtail/regrade3") == "regrade3"
-    assert canonical_name("/Users/x/Code/regrade3") == "regrade3"
-    assert canonical_name("/Users/x/Code/curtail/regrade3/.claude-worktrees/h2") == "regrade3"
-    assert canonical_name("/Users/x/Code/penguinboisoftware/PenguinClock") == "penguinclock"
+    assert canonical_name("/Users/x/Code/acme/myproject") == "myproject"
+    assert canonical_name("/Users/x/Code/myproject") == "myproject"
+    assert canonical_name("/Users/x/Code/acme/myproject/.claude-worktrees/h2") == "myproject"
+    assert canonical_name("/Users/x/Code/myorg/WidgetApp") == "widgetapp"
 
 
 def test_classify_drops_scratch_paths():
@@ -615,13 +615,13 @@ def test_classify_drops_scratch_paths():
 def test_classify_real_by_default_with_no_code_root():
     # zero-config: no code_root set, project is real unless config says otherwise
     config = Config()
-    assert classify_category("/Users/x/Code/regrade3", config, message_count=10) == "real"
+    assert classify_category("/Users/x/Code/myproject", config, message_count=10) == "real"
 
 
 def test_classify_respects_code_root_when_set():
     config = Config(code_root="/Users/x/Code")
     assert classify_category("/Users/x/Downloads/thing", config, message_count=10) == "drop"
-    assert classify_category("/Users/x/Code/regrade3", config, message_count=10) == "real"
+    assert classify_category("/Users/x/Code/myproject", config, message_count=10) == "real"
 
 
 def test_classify_bot_names_override():
@@ -734,34 +734,34 @@ def S(sid, path, updated, message_count=10):
 
 
 def test_build_journal_groups_ranks_and_splits():
-    config = Config(bot_names={"penguinbot"})
+    config = Config(bot_names={"scoutbot"})
     sessions = [
-        S("a", "/Users/x/Code/curtail/regrade3", "2026-07-01 00:00:00"),
-        S("b", "/Users/x/Code/regrade3",        "2026-07-08 00:00:00"),  # same project, newer
-        S("c", "/Users/x/Code/penguinboisoftware/we-drew-this", "2026-07-05 00:00:00"),
-        S("d", "/Users/x/Code/penguinboisoftware/penguinbot",   "2026-07-09 00:00:00"),  # bot
+        S("a", "/Users/x/Code/acme/myproject", "2026-07-01 00:00:00"),
+        S("b", "/Users/x/Code/myproject",        "2026-07-08 00:00:00"),  # same project, newer
+        S("c", "/Users/x/Code/myorg/otherproject", "2026-07-05 00:00:00"),
+        S("d", "/Users/x/Code/myorg/scoutbot",   "2026-07-09 00:00:00"),  # bot
         S("e", "/private/tmp/x/scratchpad",    "2026-07-10 00:00:00"),  # dropped
     ]
     real, bots = build_journal(sessions, config)
-    assert [p.name for p in real] == ["regrade3", "we-drew-this"]  # regrade3 newest (b) first
+    assert [p.name for p in real] == ["myproject", "otherproject"]  # myproject newest (b) first
     assert real[0].count == 2 and real[0].latest.session_id == "b"
-    assert [p.name for p in bots] == ["penguinbot"]
+    assert [p.name for p in bots] == ["scoutbot"]
 
 
 def test_build_journal_promotes_long_bot_sessions_and_drops_noise():
-    config = Config(bot_names={"penguinbot"})
+    config = Config(bot_names={"scoutbot"})
     sessions = [
-        S("f", "/Users/x/Code/penguinboisoftware/penguinbot", "2026-07-09 00:00:00", message_count=3397),
-        S("g", "/Users/x/Code/penguinboisoftware/penguinbot/afterdark", "2026-07-09 01:00:00", message_count=2),
-        S("h", "/Users/x/Code/penguinboisoftware/keepsule", "2026-07-09 02:00:00", message_count=2),
-        S("i", "/Users/x/Code/penguinboisoftware/keepsule", "2026-07-09 03:00:00", message_count=40),
+        S("f", "/Users/x/Code/myorg/scoutbot", "2026-07-09 00:00:00", message_count=3397),
+        S("g", "/Users/x/Code/myorg/scoutbot/worker", "2026-07-09 01:00:00", message_count=2),
+        S("h", "/Users/x/Code/myorg/sideproject", "2026-07-09 02:00:00", message_count=2),
+        S("i", "/Users/x/Code/myorg/sideproject", "2026-07-09 03:00:00", message_count=40),
     ]
     real, bots = build_journal(sessions, config)
     real_names = {p.name for p in real}
-    assert "penguinbot" in real_names  # promoted: long session in a bot-named project
-    assert "keepsule" in real_names
-    keepsule = next(p for p in real if p.name == "keepsule")
-    assert keepsule.count == 1 and keepsule.latest.session_id == "i"  # noisy session dropped
+    assert "scoutbot" in real_names  # promoted: long session in a bot-named project
+    assert "sideproject" in real_names
+    sideproject = next(p for p in real if p.name == "sideproject")
+    assert sideproject.count == 1 and sideproject.latest.session_id == "i"  # noisy session dropped
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -864,14 +864,14 @@ def _project(db, name):
 
 
 def test_generate_recap_uses_injected_runner(ccrider_db):
-    p = _project(ccrider_db, "regrade3")
+    p = _project(ccrider_db, "myproject")
     fake = lambda prompt: "ONELINE: did the thing\nDETAIL: all good"
     one, full = generate_recap(p, ccrider_db, runner=fake)
     assert one == "did the thing"
 
 
 def test_ensure_recaps_caches_and_reuses(tmp_path, ccrider_db):
-    p = _project(ccrider_db, "regrade3")
+    p = _project(ccrider_db, "myproject")
     cache = RecapCache(tmp_path / "r.db")
     config = Config()
     calls = []
@@ -880,14 +880,14 @@ def test_ensure_recaps_caches_and_reuses(tmp_path, ccrider_db):
         return "ONELINE: cached me\nDETAIL: x"
     r1 = ensure_recaps([p], ccrider_db, cache, config, runner=runner)
     r2 = ensure_recaps([p], ccrider_db, cache, config, runner=runner)  # signature unchanged -> cache hit
-    assert r1["regrade3"][0] == "cached me"
-    assert r2["regrade3"][0] == "cached me"
+    assert r1["myproject"][0] == "cached me"
+    assert r2["myproject"][0] == "cached me"
     assert len(calls) == 1
     cache.close()
 
 
 def test_ensure_recaps_skips_llm_when_auth_mode_none(tmp_path, ccrider_db):
-    p = _project(ccrider_db, "regrade3")
+    p = _project(ccrider_db, "myproject")
     cache = RecapCache(tmp_path / "r.db")
     config = Config(recap_auth_mode="none")
     calls = []
@@ -896,18 +896,18 @@ def test_ensure_recaps_skips_llm_when_auth_mode_none(tmp_path, ccrider_db):
         return "ONELINE: should not be called\nDETAIL: x"
     r = ensure_recaps([p], ccrider_db, cache, config, runner=runner)
     assert calls == []  # runner never invoked
-    assert r["regrade3"][0].startswith("do the thing")  # derived fallback
+    assert r["myproject"][0].startswith("do the thing")  # derived fallback
     cache.close()
 
 
 def test_ensure_recaps_falls_back_on_runner_error(tmp_path, ccrider_db):
-    p = _project(ccrider_db, "regrade3")
+    p = _project(ccrider_db, "myproject")
     cache = RecapCache(tmp_path / "r.db")
     config = Config()
     def boom(prompt):
         raise RuntimeError("claude failed")
     r = ensure_recaps([p], ccrider_db, cache, config, runner=boom)
-    assert r["regrade3"][0].startswith("do the thing")
+    assert r["myproject"][0].startswith("do the thing")
     cache.close()
 
 
@@ -1140,12 +1140,12 @@ def test_open_terminal_and_resume_runs_osascript():
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
         captured["check"] = check
-    open_terminal_and_resume("abc123", "/Users/x/Code/regrade3", runner=fake_runner)
+    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", runner=fake_runner)
     assert captured["cmd"][0] == "osascript"
     assert captured["cmd"][1] == "-e"
     script = captured["cmd"][2]
     assert "Terminal" in script
-    assert "/Users/x/Code/regrade3" in script
+    assert "/Users/x/Code/myproject" in script
     assert "claude --resume abc123" in script
     assert captured["check"] is True
 
@@ -1154,7 +1154,7 @@ def test_open_terminal_and_resume_raises_on_failure():
     def failing_runner(cmd, check):
         raise RuntimeError("osascript not found")
     with pytest.raises(RuntimeError, match="osascript not found"):
-        open_terminal_and_resume("abc123", "/Users/x/Code/regrade3", runner=failing_runner)
+        open_terminal_and_resume("abc123", "/Users/x/Code/myproject", runner=failing_runner)
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1231,7 +1231,7 @@ from tests.conftest import add_session, add_message
 
 @pytest.fixture
 def running_server(tmp_path, ccrider_db):
-    add_session(ccrider_db, "r1", "/Users/x/Code/regrade3", "2026-07-08 00:00:00", message_count=12)
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
     resumed = []
@@ -1271,7 +1271,7 @@ def test_api_journal_returns_ranked_projects(running_server):
     base_url, _, _ = running_server
     with urllib.request.urlopen(f"{base_url}/api/journal") as resp:
         data = json.loads(resp.read())
-    assert data["real"][0]["name"] == "regrade3"
+    assert data["real"][0]["name"] == "myproject"
     assert data["real"][0]["latest_session_id"] == "r1"
     assert "wire up thresholds" in data["real"][0]["oneline"]
     assert data["bots"] == []
@@ -1472,7 +1472,7 @@ def test_resume_calls_resumer_with_session_and_path(running_server):
     with urllib.request.urlopen(req) as resp:
         data = json.loads(resp.read())
     assert data["status"] == "resumed"
-    assert resumed == [("r1", "/Users/x/Code/regrade3")]
+    assert resumed == [("r1", "/Users/x/Code/myproject")]
 
 
 def test_resume_unknown_session_is_404(running_server):
@@ -1485,7 +1485,7 @@ def test_resume_unknown_session_is_404(running_server):
 
 
 def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
-    add_session(ccrider_db, "r1", "/Users/x/Code/regrade3", "2026-07-08 00:00:00", message_count=12)
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
     def failing_resumer(session_id, cwd):
@@ -1575,7 +1575,7 @@ def test_recap_endpoint_returns_derived_recap_without_llm(running_server):
     # applies if the real claude_runner errors (no `claude` on the test machine's PATH
     # is not guaranteed, so assert on structure, not exact content).
     base_url, _, _ = running_server
-    with urllib.request.urlopen(f"{base_url}/api/recap/regrade3") as resp:
+    with urllib.request.urlopen(f"{base_url}/api/recap/myproject") as resp:
         data = json.loads(resp.read())
     assert "oneline" in data
     assert "full" in data
@@ -1591,7 +1591,7 @@ def test_recap_endpoint_unknown_project_is_404(running_server):
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/test_web_server.py -v`
-Expected: FAIL — `/api/recap/regrade3` currently falls through to static file serving and 404s.
+Expected: FAIL — `/api/recap/myproject` currently falls through to static file serving and 404s.
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -1697,12 +1697,12 @@ def test_settings_get_lists_projects_and_config(running_server):
     base_url, _, _ = running_server
     with urllib.request.urlopen(f"{base_url}/api/settings") as resp:
         data = json.loads(resp.read())
-    assert any(p["name"] == "regrade3" for p in data["projects"])
+    assert any(p["name"] == "myproject" for p in data["projects"])
     assert data["config"]["recap_auth_mode"] == "claude_cli"
 
 
 def test_settings_post_saves_overrides(tmp_path, ccrider_db):
-    add_session(ccrider_db, "r1", "/Users/x/Code/regrade3", "2026-07-08 00:00:00", message_count=12)
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), lambda s, c: None, port=0)
@@ -1711,7 +1711,7 @@ def test_settings_post_saves_overrides(tmp_path, ccrider_db):
     try:
         base_url = f"http://127.0.0.1:{server.server_port}"
         payload = json.dumps({
-            "bot_names": ["regrade3"],
+            "bot_names": ["myproject"],
             "hidden_names": [],
             "recap_auth_mode": "none",
             "api_key": None,
@@ -1721,7 +1721,7 @@ def test_settings_post_saves_overrides(tmp_path, ccrider_db):
         with urllib.request.urlopen(req) as resp:
             data = json.loads(resp.read())
         assert data["status"] == "saved"
-        assert config.bot_names == {"regrade3"}
+        assert config.bot_names == {"myproject"}
         assert config.recap_auth_mode == "none"
     finally:
         server.shutdown()
