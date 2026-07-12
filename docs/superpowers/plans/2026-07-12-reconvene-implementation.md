@@ -24,12 +24,13 @@
 **Files:**
 - Create: `pyproject.toml`
 - Create: `LICENSE`
-- Create: `README.md`
 - Create: `.gitignore`
 - Create: `THIRD_PARTY_LICENSES.md`
 - Create: `reconvene/__init__.py`
 - Create: `bin/reconvene`
 - Test: none (scaffolding only; verified by import in Task 2)
+
+Note: `README.md` is NOT created here — its content is defined in Task 13 (Step 5), which is where it belongs since it documents the finished CLI's usage.
 
 **Interfaces:**
 - Produces: an installable `reconvene` package with entry point `bin/reconvene`, matching pickup's install pattern (symlink `bin/reconvene` onto PATH, or `pipx install -e .`).
@@ -136,7 +137,7 @@ Run: `chmod +x bin/reconvene`
 - [ ] **Step 8: Commit**
 
 ```bash
-git add pyproject.toml LICENSE README.md .gitignore THIRD_PARTY_LICENSES.md reconvene/__init__.py bin/reconvene
+git add pyproject.toml LICENSE .gitignore THIRD_PARTY_LICENSES.md reconvene/__init__.py bin/reconvene
 git commit -m "chore: scaffold reconvene package"
 ```
 
