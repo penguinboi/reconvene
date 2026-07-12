@@ -9,7 +9,7 @@ from tests.conftest import add_session, add_message
 
 
 def test_load_sessions_reads_rows(ccrider_db):
-    add_session(ccrider_db, "s1", "/Users/x/Code/regrade3", "2026-07-08 10:00:00", message_count=42)
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00", message_count=42)
     sessions = load_sessions(str(ccrider_db))
     assert len(sessions) == 1
     assert sessions[0].session_id == "s1"
@@ -27,7 +27,7 @@ def test_probe_schema_raises_on_missing_column(tmp_path):
 
 
 def test_connection_is_read_only(ccrider_db):
-    add_session(ccrider_db, "s1", "/Users/x/Code/regrade3", "2026-07-08 10:00:00")
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00")
     load_sessions(str(ccrider_db))  # must not raise or lock the file
     # a second independent connection must still be able to write (proves the
     # read-only connection didn't hold a lock)
@@ -38,7 +38,7 @@ def test_connection_is_read_only(ccrider_db):
 
 
 def test_session_messages_orders_and_skips_sidechain(ccrider_db):
-    add_session(ccrider_db, "s1", "/Users/x/Code/regrade3", "2026-07-08 10:00:00")
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00")
     add_message(ccrider_db, "s1", "assistant", "hi", sequence=1)
     add_message(ccrider_db, "s1", "user", "do the sensor task", sequence=2)
     add_message(ccrider_db, "s1", "user", "side note", sequence=3, is_sidechain=1)

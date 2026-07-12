@@ -25,7 +25,7 @@ def _project_summary(p, db_path):
     }
 
 
-def make_handler(config, db_path, cache_path, config_path, resumer):
+def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner=None):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
             pass  # keep test/CLI output quiet
@@ -78,7 +78,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer):
                     return
                 cache = RecapCache(cache_path)
                 try:
-                    recaps = ensure_recaps([project], db_path, cache, config)
+                    recaps = ensure_recaps([project], db_path, cache, config, runner=recap_runner)
                 finally:
                     cache.close()
                 oneline, full = recaps.get(project.name, ("", "(no recap)"))
@@ -132,6 +132,6 @@ def make_handler(config, db_path, cache_path, config_path, resumer):
     return Handler
 
 
-def serve(config, db_path, cache_path, config_path, resumer, host="127.0.0.1", port=0):
-    handler = make_handler(config, db_path, cache_path, config_path, resumer)
+def serve(config, db_path, cache_path, config_path, resumer, recap_runner=None, host="127.0.0.1", port=0):
+    handler = make_handler(config, db_path, cache_path, config_path, resumer, recap_runner)
     return ThreadingHTTPServer((host, port), handler)

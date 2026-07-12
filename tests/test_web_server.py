@@ -20,8 +20,9 @@ def running_server(tmp_path, ccrider_db):
     resumed = []
     def fake_resumer(session_id, cwd):
         resumed.append((session_id, cwd))
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
-                   fake_resumer, port=0)
+                   fake_resumer, recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base_url = f"http://127.0.0.1:{server.server_port}"
@@ -85,8 +86,9 @@ def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
     config = Config()
     def failing_resumer(session_id, cwd):
         raise RuntimeError("osascript not found")
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
-                   failing_resumer, port=0)
+                   failing_resumer, recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -102,15 +104,13 @@ def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
 
 def test_recap_endpoint_returns_derived_recap_without_llm(running_server):
     # running_server's Config() defaults to recap_auth_mode="claude_cli", but no real
-    # `claude` binary is invoked here because we only exercise the endpoint's plumbing
-    # with a project whose session is short enough that ensure_recaps' fallback chain
-    # applies if the real claude_runner errors (no `claude` on the test machine's PATH
-    # is not guaranteed, so assert on structure, not exact content).
+    # `claude` binary is invoked here — the server is wired up with a fake recap_runner,
+    # so the response is the deterministic text that fake returns.
     base_url, _, _ = running_server
     with urllib.request.urlopen(f"{base_url}/api/recap/myproject") as resp:
         data = json.loads(resp.read())
-    assert "oneline" in data
-    assert "full" in data
+    assert data["oneline"] == "test recap"
+    assert data["full"] == "test"
 
 
 def test_recap_endpoint_unknown_project_is_404(running_server):
@@ -133,7 +133,9 @@ def test_settings_post_saves_overrides(tmp_path, ccrider_db):
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
     config_path = str(tmp_path / "config.json")
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), config_path, lambda s, c: None, port=0)
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), config_path, lambda s, c: None,
+                   recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -161,7 +163,9 @@ def test_settings_post_persists_to_configured_path_not_real_config(tmp_path, ccr
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
     config_path = tmp_path / "config.json"
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c: None, port=0)
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c: None,
+                   recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

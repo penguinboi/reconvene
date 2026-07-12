@@ -20,8 +20,9 @@ def test_full_journal_and_resume_flow(tmp_path, ccrider_db):
     save_config(config, config_path)
 
     resumed = []
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path),
-                    lambda sid, cwd: resumed.append((sid, cwd)), port=0)
+                    lambda sid, cwd: resumed.append((sid, cwd)), recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
