@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from ..db import load_sessions
 from ..journal import build_journal
-from ..recap import first_user_message
+from ..recap import RecapCache, ensure_recaps, first_user_message
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -66,6 +66,22 @@ def make_handler(config, db_path, cache_path, resumer):
                     "real": [_project_summary(p, db_path) for p in real],
                     "bots": [_project_summary(p, db_path) for p in bots],
                 })
+                return
+            if path.startswith("/api/recap/"):
+                name = path[len("/api/recap/"):]
+                sessions = load_sessions(db_path)
+                real, bots = build_journal(sessions, config)
+                project = next((p for p in real + bots if p.name == name), None)
+                if project is None:
+                    self._send_json(404, {"error": f"no project named {name!r}"})
+                    return
+                cache = RecapCache(cache_path)
+                try:
+                    recaps = ensure_recaps([project], db_path, cache, config)
+                finally:
+                    cache.close()
+                oneline, full = recaps.get(project.name, ("", "(no recap)"))
+                self._send_json(200, {"oneline": oneline, "full": full})
                 return
             rel_path = "index.html" if path == "/" else path.lstrip("/")
             self._send_static(rel_path)

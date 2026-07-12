@@ -18,10 +18,16 @@ async function loadJournal() {
     const div = document.createElement("div");
     div.className = "project";
     div.dataset.sessionId = project.latest_session_id;
-    div.innerHTML = `<strong>${project.name}</strong> · ${project.count} sessions
-      <div class="meta">${project.oneline}</div>`;
+    const metaEl = document.createElement("div");
+    metaEl.className = "meta";
+    metaEl.textContent = project.oneline;
+    div.innerHTML = `<strong>${project.name}</strong> · ${project.count} sessions`;
+    div.appendChild(metaEl);
     div.addEventListener("click", () => resumeProject(project.latest_session_id));
     el.appendChild(div);
+    fetch(`/api/recap/${project.name}`)
+      .then((r) => r.json())
+      .then((recap) => { metaEl.textContent = recap.oneline; });
   }
 }
 

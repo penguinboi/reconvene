@@ -96,3 +96,23 @@ def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_recap_endpoint_returns_derived_recap_without_llm(running_server):
+    # running_server's Config() defaults to recap_auth_mode="claude_cli", but no real
+    # `claude` binary is invoked here because we only exercise the endpoint's plumbing
+    # with a project whose session is short enough that ensure_recaps' fallback chain
+    # applies if the real claude_runner errors (no `claude` on the test machine's PATH
+    # is not guaranteed, so assert on structure, not exact content).
+    base_url, _, _ = running_server
+    with urllib.request.urlopen(f"{base_url}/api/recap/myproject") as resp:
+        data = json.loads(resp.read())
+    assert "oneline" in data
+    assert "full" in data
+
+
+def test_recap_endpoint_unknown_project_is_404(running_server):
+    base_url, _, _ = running_server
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(f"{base_url}/api/recap/does-not-exist")
+    assert exc.value.code == 404
