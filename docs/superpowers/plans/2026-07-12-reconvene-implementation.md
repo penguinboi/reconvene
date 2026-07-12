@@ -1890,7 +1890,7 @@ git commit -m "feat: add settings endpoint and page for classification overrides
 - Test: `tests/test_cli.py`
 
 **Interfaces:**
-- Consumes: `load_config` from `reconvene.config`; `serve` from `reconvene.web.server`; `open_terminal_and_resume` from `reconvene.resume`; `CCRIDER_DB`, `RECAP_CACHE_DB` from `reconvene.constants`.
+- Consumes: `load_config` from `reconvene.config`; `serve(config, db_path, cache_path, config_path, resumer, host="127.0.0.1", port=0)` from `reconvene.web.server` (note: `config_path` was added as a 4th positional parameter by Task 12's fix — always pass `args.config`, not a bare `serve(config, args.db, args.cache, resumer, ...)` call); `open_terminal_and_resume` from `reconvene.resume`; `CCRIDER_DB`, `CONFIG_PATH`, `RECAP_CACHE_DB` from `reconvene.constants`.
 - Produces: `main(argv=None) -> int`, `find_free_port(preferred=4242, tries=10) -> int`.
 
 - [ ] **Step 1: Write the failing test**
@@ -1972,7 +1972,7 @@ import threading
 import webbrowser
 
 from .config import load_config
-from .constants import CCRIDER_DB, RECAP_CACHE_DB, VERSION
+from .constants import CCRIDER_DB, CONFIG_PATH, RECAP_CACHE_DB, VERSION
 from .resume import open_terminal_and_resume
 from .web.server import serve
 
@@ -1996,6 +1996,7 @@ def main(argv=None) -> int:
     ap.add_argument("--no-sync", action="store_true", help="skip `ccrider sync` first")
     ap.add_argument("--db", default=str(CCRIDER_DB), help="ccrider sessions DB path")
     ap.add_argument("--cache", default=str(RECAP_CACHE_DB), help="recap cache path")
+    ap.add_argument("--config", default=str(CONFIG_PATH), help="config file path")
     ap.add_argument("-V", "--version", action="version", version=f"reconvene {VERSION}")
     args = ap.parse_args(argv)
 
@@ -2012,13 +2013,13 @@ def main(argv=None) -> int:
         if result.returncode != 0:
             print(f"warning: `ccrider sync` exited {result.returncode}; showing possibly-stale data", file=sys.stderr)
 
-    config = load_config()
+    config = load_config(args.config)
     try:
         port = find_free_port()
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    server = serve(config, args.db, args.cache, open_terminal_and_resume, port=port)
+    server = serve(config, args.db, args.cache, args.config, open_terminal_and_resume, port=port)
     url = f"http://127.0.0.1:{port}"
     print(f"Reconvene running at {url}")
     threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()
@@ -2112,7 +2113,7 @@ def test_full_journal_and_resume_flow(tmp_path, ccrider_db):
     save_config(config, config_path)
 
     resumed = []
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"),
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path),
                     lambda sid, cwd: resumed.append((sid, cwd)), port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
