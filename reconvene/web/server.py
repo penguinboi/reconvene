@@ -70,6 +70,29 @@ def make_handler(config, db_path, cache_path, resumer):
             rel_path = "index.html" if path == "/" else path.lstrip("/")
             self._send_static(rel_path)
 
+        def do_POST(self):
+            path = urlparse(self.path).path
+            if path.startswith("/api/resume/"):
+                session_id = path[len("/api/resume/"):]
+                sessions = load_sessions(db_path)
+                real, bots = build_journal(sessions, config)
+                match = next(
+                    (s for p in real + bots for s in p.sessions if s.session_id == session_id),
+                    None,
+                )
+                if match is None:
+                    self._send_json(404, {"error": f"no session {session_id!r}"})
+                    return
+                try:
+                    resumer(session_id, match.project_path)
+                except Exception as e:
+                    self._send_json(500, {"error": str(e)})
+                    return
+                self._send_json(200, {"status": "resumed"})
+                return
+            self.send_response(404)
+            self.end_headers()
+
     return Handler
 
 

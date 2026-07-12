@@ -58,3 +58,41 @@ def test_api_journal_returns_ranked_projects(running_server):
     assert data["real"][0]["latest_session_id"] == "r1"
     assert "wire up thresholds" in data["real"][0]["oneline"]
     assert data["bots"] == []
+
+
+def test_resume_calls_resumer_with_session_and_path(running_server):
+    base_url, resumed, _ = running_server
+    req = urllib.request.Request(f"{base_url}/api/resume/r1", method="POST", data=b"")
+    with urllib.request.urlopen(req) as resp:
+        data = json.loads(resp.read())
+    assert data["status"] == "resumed"
+    assert resumed == [("r1", "/Users/x/Code/myproject")]
+
+
+def test_resume_unknown_session_is_404(running_server):
+    base_url, resumed, _ = running_server
+    req = urllib.request.Request(f"{base_url}/api/resume/does-not-exist", method="POST", data=b"")
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(req)
+    assert exc.value.code == 404
+    assert resumed == []
+
+
+def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config()
+    def failing_resumer(session_id, cwd):
+        raise RuntimeError("osascript not found")
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), failing_resumer, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        req = urllib.request.Request(f"{base_url}/api/resume/r1", method="POST", data=b"")
+        with pytest.raises(HTTPError) as exc:
+            urllib.request.urlopen(req)
+        assert exc.value.code == 500
+    finally:
+        server.shutdown()
+        server.server_close()
