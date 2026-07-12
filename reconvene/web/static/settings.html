@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Reconvene — Settings</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>Settings</h1>
+  <table id="projects"></table>
+  <h2>Recap generation</h2>
+  <label><input type="radio" name="auth" value="claude_cli"> Use claude CLI login</label><br>
+  <label><input type="radio" name="auth" value="api_key"> Use an API key</label>
+  <input type="text" id="apiKey" placeholder="sk-..."><br>
+  <label><input type="radio" name="auth" value="none"> No recaps</label><br>
+  <button id="save">Save</button>
+  <a href="/">Back</a>
+  <script src="/settings.js"></script>
+</body>
+</html>

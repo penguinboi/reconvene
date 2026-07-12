@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+from ..config import save_config
 from ..db import load_sessions
 from ..journal import build_journal
 from ..recap import RecapCache, ensure_recaps, first_user_message
@@ -83,11 +84,21 @@ def make_handler(config, db_path, cache_path, resumer):
                 oneline, full = recaps.get(project.name, ("", "(no recap)"))
                 self._send_json(200, {"oneline": oneline, "full": full})
                 return
+            if path == "/api/settings":
+                sessions = load_sessions(db_path)
+                real, bots = build_journal(sessions, config)
+                self._send_json(200, {
+                    "projects": [_project_summary(p, db_path) for p in real + bots],
+                    "config": config.to_dict(),
+                })
+                return
             rel_path = "index.html" if path == "/" else path.lstrip("/")
             self._send_static(rel_path)
 
         def do_POST(self):
             path = urlparse(self.path).path
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else b"{}"
             if path.startswith("/api/resume/"):
                 session_id = path[len("/api/resume/"):]
                 sessions = load_sessions(db_path)
@@ -105,6 +116,15 @@ def make_handler(config, db_path, cache_path, resumer):
                     self._send_json(500, {"error": str(e)})
                     return
                 self._send_json(200, {"status": "resumed"})
+                return
+            if path == "/api/settings":
+                data = json.loads(body)
+                config.bot_names = set(data.get("bot_names", []))
+                config.hidden_names = set(data.get("hidden_names", []))
+                config.recap_auth_mode = data.get("recap_auth_mode", config.recap_auth_mode)
+                config.api_key = data.get("api_key", config.api_key)
+                save_config(config)
+                self._send_json(200, {"status": "saved", "config": config.to_dict()})
                 return
             self.send_response(404)
             self.end_headers()

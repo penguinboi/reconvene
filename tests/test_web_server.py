@@ -116,3 +116,38 @@ def test_recap_endpoint_unknown_project_is_404(running_server):
     with pytest.raises(HTTPError) as exc:
         urllib.request.urlopen(f"{base_url}/api/recap/does-not-exist")
     assert exc.value.code == 404
+
+
+def test_settings_get_lists_projects_and_config(running_server):
+    base_url, _, _ = running_server
+    with urllib.request.urlopen(f"{base_url}/api/settings") as resp:
+        data = json.loads(resp.read())
+    assert any(p["name"] == "myproject" for p in data["projects"])
+    assert data["config"]["recap_auth_mode"] == "claude_cli"
+
+
+def test_settings_post_saves_overrides(tmp_path, ccrider_db):
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config()
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), lambda s, c: None, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        payload = json.dumps({
+            "bot_names": ["myproject"],
+            "hidden_names": [],
+            "recap_auth_mode": "none",
+            "api_key": None,
+        }).encode()
+        req = urllib.request.Request(f"{base_url}/api/settings", method="POST", data=payload,
+                                      headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read())
+        assert data["status"] == "saved"
+        assert config.bot_names == {"myproject"}
+        assert config.recap_auth_mode == "none"
+    finally:
+        server.shutdown()
+        server.server_close()
