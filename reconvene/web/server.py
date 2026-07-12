@@ -25,7 +25,7 @@ def _project_summary(p, db_path):
     }
 
 
-def make_handler(config, db_path, cache_path, resumer):
+def make_handler(config, db_path, cache_path, config_path, resumer):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
             pass  # keep test/CLI output quiet
@@ -123,7 +123,7 @@ def make_handler(config, db_path, cache_path, resumer):
                 config.hidden_names = set(data.get("hidden_names", []))
                 config.recap_auth_mode = data.get("recap_auth_mode", config.recap_auth_mode)
                 config.api_key = data.get("api_key", config.api_key)
-                save_config(config)
+                save_config(config, config_path)
                 self._send_json(200, {"status": "saved", "config": config.to_dict()})
                 return
             self.send_response(404)
@@ -132,6 +132,6 @@ def make_handler(config, db_path, cache_path, resumer):
     return Handler
 
 
-def serve(config, db_path, cache_path, resumer, host="127.0.0.1", port=0):
-    handler = make_handler(config, db_path, cache_path, resumer)
+def serve(config, db_path, cache_path, config_path, resumer, host="127.0.0.1", port=0):
+    handler = make_handler(config, db_path, cache_path, config_path, resumer)
     return ThreadingHTTPServer((host, port), handler)

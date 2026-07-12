@@ -20,7 +20,8 @@ def running_server(tmp_path, ccrider_db):
     resumed = []
     def fake_resumer(session_id, cwd):
         resumed.append((session_id, cwd))
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), fake_resumer, port=0)
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
+                   fake_resumer, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base_url = f"http://127.0.0.1:{server.server_port}"
@@ -84,7 +85,8 @@ def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
     config = Config()
     def failing_resumer(session_id, cwd):
         raise RuntimeError("osascript not found")
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), failing_resumer, port=0)
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
+                   failing_resumer, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -130,7 +132,8 @@ def test_settings_post_saves_overrides(tmp_path, ccrider_db):
     add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), lambda s, c: None, port=0)
+    config_path = str(tmp_path / "config.json")
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), config_path, lambda s, c: None, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -148,6 +151,35 @@ def test_settings_post_saves_overrides(tmp_path, ccrider_db):
         assert data["status"] == "saved"
         assert config.bot_names == {"myproject"}
         assert config.recap_auth_mode == "none"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_settings_post_persists_to_configured_path_not_real_config(tmp_path, ccrider_db):
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config()
+    config_path = tmp_path / "config.json"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c: None, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        payload = json.dumps({
+            "bot_names": ["myproject"],
+            "hidden_names": [],
+            "recap_auth_mode": "none",
+            "api_key": None,
+        }).encode()
+        req = urllib.request.Request(f"{base_url}/api/settings", method="POST", data=payload,
+                                      headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req):
+            pass
+        assert config_path.exists()
+        on_disk = json.loads(config_path.read_text())
+        assert on_disk["bot_names"] == ["myproject"]
+        assert on_disk["recap_auth_mode"] == "none"
     finally:
         server.shutdown()
         server.server_close()
