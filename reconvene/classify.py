@@ -28,10 +28,10 @@ def classify_category(project_path: str, config, message_count: int | None = Non
         if message_count is not None and message_count > BOT_PROMOTE_MESSAGE_COUNT:
             return "real"
         return "bot"
-    if config.code_root and not (
-        project_path == config.code_root or project_path.startswith(config.code_root + "/")
-    ):
-        return "drop"
+    if config.code_root:
+        code_root = config.code_root.rstrip("/")
+        if not (project_path == code_root or project_path.startswith(code_root + "/")):
+            return "drop"
     if message_count is not None and message_count <= NOISE_MESSAGE_FLOOR:
         return "drop"
     return "real"

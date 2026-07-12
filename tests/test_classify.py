@@ -5,10 +5,10 @@ from reconvene.config import Config
 
 
 def test_canonical_folds_worktree_and_case():
-    assert canonical_name("/Users/x/Code/curtail/regrade3") == "regrade3"
-    assert canonical_name("/Users/x/Code/regrade3") == "regrade3"
-    assert canonical_name("/Users/x/Code/curtail/regrade3/.claude-worktrees/h2") == "regrade3"
-    assert canonical_name("/Users/x/Code/penguinboisoftware/PenguinClock") == "penguinclock"
+    assert canonical_name("/Users/x/Code/acme/myproject") == "myproject"
+    assert canonical_name("/Users/x/Code/myproject") == "myproject"
+    assert canonical_name("/Users/x/Code/acme/myproject/.claude-worktrees/h2") == "myproject"
+    assert canonical_name("/Users/x/Code/myorg/WidgetApp") == "widgetapp"
 
 
 def test_classify_drops_scratch_paths():
@@ -19,13 +19,19 @@ def test_classify_drops_scratch_paths():
 def test_classify_real_by_default_with_no_code_root():
     # zero-config: no code_root set, project is real unless config says otherwise
     config = Config()
-    assert classify_category("/Users/x/Code/regrade3", config, message_count=10) == "real"
+    assert classify_category("/Users/x/Code/myproject", config, message_count=10) == "real"
 
 
 def test_classify_respects_code_root_when_set():
     config = Config(code_root="/Users/x/Code")
     assert classify_category("/Users/x/Downloads/thing", config, message_count=10) == "drop"
-    assert classify_category("/Users/x/Code/regrade3", config, message_count=10) == "real"
+    assert classify_category("/Users/x/Code/myproject", config, message_count=10) == "real"
+
+
+def test_classify_respects_code_root_with_trailing_slash():
+    config = Config(code_root="/Users/x/Code/")
+    assert classify_category("/Users/x/Downloads/thing", config, message_count=10) == "drop"
+    assert classify_category("/Users/x/Code/myproject", config, message_count=10) == "real"
 
 
 def test_classify_bot_names_override():
