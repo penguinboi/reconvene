@@ -13,6 +13,8 @@ def test_load_config_missing_file_returns_defaults(tmp_path):
     assert config.hidden_path_substrings == set()
     assert config.recap_auth_mode == "claude_cli"
     assert config.api_key is None
+    assert config.terminal_app == "Terminal"
+    assert config.claude_extra_args == ""
 
 
 def test_save_then_load_round_trips(tmp_path):
@@ -24,6 +26,8 @@ def test_save_then_load_round_trips(tmp_path):
         hidden_path_substrings={"sarb_agent_"},
         recap_auth_mode="api_key",
         api_key="sk-test",
+        terminal_app="iTerm2",
+        claude_extra_args="--dangerously-skip-permissions",
     )
     save_config(config, path)
     loaded = load_config(path)

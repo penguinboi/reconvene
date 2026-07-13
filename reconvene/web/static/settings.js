@@ -20,6 +20,8 @@ async function loadSettings() {
   if (authRadio) authRadio.checked = true;
   document.getElementById("apiKey").value = data.config.api_key || "";
   document.getElementById("hiddenPathSubstrings").value = data.config.hidden_path_substrings.join("\n");
+  document.getElementById("terminalApp").value = data.config.terminal_app;
+  document.getElementById("claudeExtraArgs").value = data.config.claude_extra_args || "";
 }
 
 document.getElementById("save").addEventListener("click", async () => {
@@ -43,6 +45,8 @@ document.getElementById("save").addEventListener("click", async () => {
       hidden_path_substrings: hiddenPathSubstrings,
       recap_auth_mode: authMode,
       api_key: document.getElementById("apiKey").value || null,
+      terminal_app: document.getElementById("terminalApp").value,
+      claude_extra_args: document.getElementById("claudeExtraArgs").value,
     }),
   });
 });

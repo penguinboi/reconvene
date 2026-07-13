@@ -124,6 +124,8 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 config.hidden_path_substrings = set(data.get("hidden_path_substrings", []))
                 config.recap_auth_mode = data.get("recap_auth_mode", config.recap_auth_mode)
                 config.api_key = data.get("api_key", config.api_key)
+                config.terminal_app = data.get("terminal_app", config.terminal_app)
+                config.claude_extra_args = data.get("claude_extra_args", config.claude_extra_args)
                 save_config(config, config_path)
                 self._send_json(200, {"status": "saved", "config": config.to_dict()})
                 return

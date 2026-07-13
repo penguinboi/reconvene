@@ -15,6 +15,8 @@ class Config:
     hidden_path_substrings: set[str] = field(default_factory=set)
     recap_auth_mode: str = "claude_cli"
     api_key: str | None = None
+    terminal_app: str = "Terminal"
+    claude_extra_args: str = ""
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -32,6 +34,8 @@ class Config:
             hidden_path_substrings=set(d.get("hidden_path_substrings", [])),
             recap_auth_mode=d.get("recap_auth_mode", "claude_cli"),
             api_key=d.get("api_key"),
+            terminal_app=d.get("terminal_app", "Terminal"),
+            claude_extra_args=d.get("claude_extra_args", ""),
         )
 
 

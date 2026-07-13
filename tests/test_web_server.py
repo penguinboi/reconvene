@@ -190,6 +190,40 @@ def test_settings_post_persists_to_configured_path_not_real_config(tmp_path, ccr
         server.server_close()
 
 
+def test_settings_post_saves_terminal_app_and_extra_args(tmp_path, ccrider_db):
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config()
+    config_path = tmp_path / "config.json"
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c: None,
+                   recap_runner=fake_recap_runner, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        payload = json.dumps({
+            "bot_names": [],
+            "hidden_names": [],
+            "recap_auth_mode": "none",
+            "api_key": None,
+            "terminal_app": "iTerm2",
+            "claude_extra_args": "--dangerously-skip-permissions",
+        }).encode()
+        req = urllib.request.Request(f"{base_url}/api/settings", method="POST", data=payload,
+                                      headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req):
+            pass
+        assert config.terminal_app == "iTerm2"
+        assert config.claude_extra_args == "--dangerously-skip-permissions"
+        on_disk = json.loads(config_path.read_text())
+        assert on_disk["terminal_app"] == "iTerm2"
+        assert on_disk["claude_extra_args"] == "--dangerously-skip-permissions"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_settings_post_saves_hidden_path_substrings(tmp_path, ccrider_db):
     add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)

@@ -54,7 +54,8 @@ def main(argv=None) -> int:
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    server = serve(config, args.db, args.cache, args.config, open_terminal_and_resume, port=port)
+    resumer = lambda session_id, cwd: open_terminal_and_resume(session_id, cwd, config)
+    server = serve(config, args.db, args.cache, args.config, resumer, port=port)
     url = f"http://127.0.0.1:{port}"
     print(f"Reconvene running at {url}")
     threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()

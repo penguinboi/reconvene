@@ -2,11 +2,18 @@
 # ABOUTME: Injects a fake subprocess runner so no real Terminal window is ever opened in tests.
 import pytest
 
+from reconvene.config import Config
 from reconvene.resume import open_terminal_and_resume, resume_command
 
 
 def test_resume_command():
     assert resume_command("abc123") == ["claude", "--resume", "abc123"]
+
+
+def test_resume_command_appends_extra_args():
+    assert resume_command("abc123", extra_args="--dangerously-skip-permissions") == [
+        "claude", "--resume", "abc123", "--dangerously-skip-permissions",
+    ]
 
 
 def test_open_terminal_and_resume_runs_osascript():
@@ -30,3 +37,26 @@ def test_open_terminal_and_resume_raises_on_failure():
         raise RuntimeError("osascript not found")
     with pytest.raises(RuntimeError, match="osascript not found"):
         open_terminal_and_resume("abc123", "/Users/x/Code/myproject", runner=failing_runner)
+
+
+def test_open_terminal_and_resume_uses_iterm2_when_configured():
+    captured = {}
+    def fake_runner(cmd, check):
+        captured["cmd"] = cmd
+    config = Config(terminal_app="iTerm2")
+    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", config=config, runner=fake_runner)
+    script = captured["cmd"][2]
+    assert "iTerm2" in script
+    assert "activate" in script
+    assert "/Users/x/Code/myproject" in script
+    assert "claude --resume abc123" in script
+
+
+def test_open_terminal_and_resume_appends_configured_extra_args():
+    captured = {}
+    def fake_runner(cmd, check):
+        captured["cmd"] = cmd
+    config = Config(claude_extra_args="--dangerously-skip-permissions")
+    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", config=config, runner=fake_runner)
+    script = captured["cmd"][2]
+    assert "claude --resume abc123 --dangerously-skip-permissions" in script

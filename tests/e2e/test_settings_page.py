@@ -28,6 +28,8 @@ def test_settings_edit_and_save_persists_to_disk(page, e2e_server, ccrider_db):
     page.locator('input[name="auth"][value="api_key"]').check()
     page.locator("#apiKey").fill("sk-test-123")
     page.locator("#hiddenPathSubstrings").fill("sarb_agent_\nscratch-")
+    page.locator("#terminalApp").select_option("iTerm2")
+    page.locator("#claudeExtraArgs").fill("--dangerously-skip-permissions")
 
     with page.expect_response(
         lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"
@@ -40,3 +42,5 @@ def test_settings_edit_and_save_persists_to_disk(page, e2e_server, ccrider_db):
     assert reloaded.recap_auth_mode == "api_key"
     assert reloaded.api_key == "sk-test-123"
     assert reloaded.hidden_path_substrings == {"sarb_agent_", "scratch-"}
+    assert reloaded.terminal_app == "iTerm2"
+    assert reloaded.claude_extra_args == "--dangerously-skip-permissions"

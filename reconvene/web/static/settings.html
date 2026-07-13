@@ -17,6 +17,15 @@
   <label><input type="radio" name="auth" value="api_key"> Use an API key</label>
   <input type="text" id="apiKey" placeholder="sk-..."><br>
   <label><input type="radio" name="auth" value="none"> No recaps</label><br>
+  <h2>Resume</h2>
+  <label>Terminal app:
+    <select id="terminalApp">
+      <option value="Terminal">Terminal</option>
+      <option value="iTerm2">iTerm2</option>
+    </select>
+  </label><br>
+  <label>Claude Code flags: <input type="text" id="claudeExtraArgs" placeholder="--dangerously-skip-permissions"></label>
+  <p>Extra arguments appended to <code>claude --resume &lt;session&gt;</code> when opening a session.</p>
   <button id="save">Save</button>
   <a href="/">Back</a>
   <script src="/settings.js"></script>
