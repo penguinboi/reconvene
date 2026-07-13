@@ -1,5 +1,7 @@
 # ABOUTME: E2E tests for the journal page — real render, async recap fill-in, resume success/failure.
 # ABOUTME: Verifies what only a real browser can prove: the page actually shows what the API returns.
+import time
+
 from tests.conftest import add_session, add_message
 
 
@@ -20,6 +22,12 @@ def test_recap_fills_in_asynchronously(page, e2e_server, ccrider_db):
     base_url, resumed, config, config_path = e2e_server
     add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+
+    def delay_recap_response(route):
+        time.sleep(0.1)
+        route.continue_()
+
+    page.route("**/api/recap/**", delay_recap_response)
 
     page.goto(base_url)
     meta = page.locator(".project .meta")

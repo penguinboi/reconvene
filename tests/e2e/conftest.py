@@ -1,7 +1,6 @@
 # ABOUTME: Fixtures starting a real Reconvene server for Playwright-driven E2E tests.
 # ABOUTME: Each test gets its own isolated server, temp DB, and temp config — no shared state.
 import threading
-import time
 
 import pytest
 
@@ -15,8 +14,6 @@ def _start_server(tmp_path, ccrider_db, resumer):
     save_config(config, config_path)
 
     def fake_recap_runner(prompt):
-        # Small delay to simulate async network fetch, making test_recap_fills_in_asynchronously observable
-        time.sleep(0.1)
         return "ONELINE: full recap text\nDETAIL: full recap text"
 
     server = serve(
