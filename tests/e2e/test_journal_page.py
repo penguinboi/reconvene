@@ -45,6 +45,7 @@ def test_journal_renders_project_card(page, e2e_server, ccrider_db):
     text = card.inner_text()
     assert "myproject" in text
     assert "1 sessions" in text  # app.js doesn't pluralize "sessions" — this is the real rendered text, not a typo
+    assert page.locator("h1 .cursor").count() == 1
 
 
 def test_journal_shows_empty_state_when_no_real_projects(page, e2e_server):
