@@ -24,7 +24,7 @@ def test_recap_fills_in_asynchronously(page, e2e_server, ccrider_db):
     add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
 
     def delay_recap_response(route):
-        time.sleep(0.1)
+        time.sleep(0.1)  # guarantees the fast fallback text is observable before the recap replaces it
         route.continue_()
 
     page.route("**/api/recap/**", delay_recap_response)
