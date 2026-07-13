@@ -53,12 +53,15 @@ PROMPT_TEMPLATE = (
     "can decide whether to resume this thread. The sessions are newest-first.\n\n"
     "Respond in EXACTLY this format and nothing else:\n"
     "ONELINE: <one sentence, <=90 chars, what the project is currently about / last worked on>\n"
-    "DETAIL: <2-4 short lines: what was done, current state, any obvious next step>\n\n"
+    "DETAIL: <a detailed, multi-paragraph summary (aim for 150-300 words across 2-4 paragraphs). "
+    "Cover: what problem or feature was being worked on and why, the concrete changes and decisions "
+    "made across these sessions, any bugs found and how they were fixed, the current state of the "
+    "code, and a specific recommended next step. Write in full sentences, not clipped fragments.>\n\n"
     "{transcript}"
 )
 
 
-def build_prompt(project, db_path, recent=RECENT_SESSIONS_FOR_RECAP, per_session_chars=2000):
+def build_prompt(project, db_path, recent=RECENT_SESSIONS_FOR_RECAP, per_session_chars=6000):
     blocks = []
     for s in project.sessions[:recent]:
         msgs = session_messages(db_path, s.session_id)

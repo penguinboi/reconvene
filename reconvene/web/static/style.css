@@ -5,5 +5,5 @@ body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; 
 .error { background: #fdecea; color: #611a15; border: 1px solid #f5c6cb; border-radius: 6px; padding: 0.5rem 0.75rem; margin-bottom: 1rem; }
 .modal { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; }
 .modal.hidden { display: none; }
-.modal-content { background: white; border-radius: 8px; padding: 1.5rem; max-width: 480px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
+.modal-content { background: white; border-radius: 8px; padding: 1.5rem; max-width: 640px; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2); }
 .modal-content p { white-space: pre-wrap; color: #444; }

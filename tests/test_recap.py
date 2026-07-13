@@ -5,7 +5,7 @@ import tempfile
 from reconvene.config import Config
 from reconvene.db import Session
 from reconvene.journal import Project
-from reconvene.recap import claude_runner, ensure_recaps, generate_recap, RecapCache
+from reconvene.recap import build_prompt, claude_runner, ensure_recaps, generate_recap, RecapCache
 
 
 def _project(db, name):
@@ -13,6 +13,24 @@ def _project(db, name):
     add_session(db, "s1", f"/Users/x/Code/{name}", "2026-07-08 10:00:00", message_count=5)
     add_message(db, "s1", "user", "do the thing", sequence=1)
     return Project(name, "real", [Session("s1", f"/Users/x/Code/{name}", "2026-07-08 10:00:00", "x", 5, None, None)])
+
+
+def test_build_prompt_asks_for_multi_paragraph_detail(ccrider_db):
+    p = _project(ccrider_db, "myproject")
+    prompt = build_prompt(p, ccrider_db)
+    assert "multi-paragraph" in prompt
+
+
+def test_build_prompt_default_char_budget_covers_a_long_session(ccrider_db):
+    from tests.conftest import add_session, add_message
+    add_session(ccrider_db, "s2", "/Users/x/Code/myproject", "2026-07-09 10:00:00", message_count=1)
+    long_body = "x" * 5000  # longer than the old 2000-char-per-session budget
+    add_message(ccrider_db, "s2", "user", long_body, sequence=1)
+    p = Project("myproject", "real", [
+        Session("s2", "/Users/x/Code/myproject", "2026-07-09 10:00:00", "x", 1, None, None),
+    ])
+    prompt = build_prompt(p, ccrider_db)
+    assert long_body in prompt
 
 
 def test_generate_recap_uses_injected_runner(ccrider_db):
