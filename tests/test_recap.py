@@ -19,6 +19,7 @@ def test_build_prompt_asks_for_multi_paragraph_detail(ccrider_db):
     p = _project(ccrider_db, "myproject")
     prompt = build_prompt(p, ccrider_db)
     assert "multi-paragraph" in prompt
+    assert "600 words" in prompt
 
 
 def test_build_prompt_default_char_budget_covers_a_long_session(ccrider_db):

@@ -53,7 +53,7 @@ PROMPT_TEMPLATE = (
     "can decide whether to resume this thread. The sessions are newest-first.\n\n"
     "Respond in EXACTLY this format and nothing else:\n"
     "ONELINE: <one sentence, <=90 chars, what the project is currently about / last worked on>\n"
-    "DETAIL: <a detailed, multi-paragraph summary (aim for 150-300 words across 2-4 paragraphs). "
+    "DETAIL: <a detailed, multi-paragraph summary, up to 600 words across 3-6 paragraphs. "
     "Cover: what problem or feature was being worked on and why, the concrete changes and decisions "
     "made across these sessions, any bugs found and how they were fixed, the current state of the "
     "code, and a specific recommended next step. Write in full sentences, not clipped fragments.>\n\n"
