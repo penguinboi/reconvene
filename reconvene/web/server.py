@@ -121,6 +121,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 data = json.loads(body)
                 config.bot_names = set(data.get("bot_names", []))
                 config.hidden_names = set(data.get("hidden_names", []))
+                config.hidden_path_substrings = set(data.get("hidden_path_substrings", []))
                 config.recap_auth_mode = data.get("recap_auth_mode", config.recap_auth_mode)
                 config.api_key = data.get("api_key", config.api_key)
                 save_config(config, config_path)

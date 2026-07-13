@@ -44,6 +44,12 @@ def test_classify_hidden_names_override():
     assert classify_category("/Users/x/Code/scratch-repo", config, message_count=10) == "drop"
 
 
+def test_classify_hidden_path_substrings_drops_matching_paths():
+    config = Config(hidden_path_substrings={"sarb_agent_"})
+    assert classify_category("/Users/x/Code/sarb_agent_b7tzmkgv", config, message_count=40) == "drop"
+    assert classify_category("/Users/x/Code/myproject", config, message_count=40) == "real"
+
+
 def test_classify_promotes_long_bot_sessions_to_real():
     config = Config(bot_names={"scoutbot"})
     assert classify_category("/Users/x/Code/scoutbot", config, message_count=2) == "bot"

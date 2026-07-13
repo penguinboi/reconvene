@@ -10,6 +10,7 @@ def test_load_config_missing_file_returns_defaults(tmp_path):
     assert config.code_root is None
     assert config.bot_names == set()
     assert config.hidden_names == set()
+    assert config.hidden_path_substrings == set()
     assert config.recap_auth_mode == "claude_cli"
     assert config.api_key is None
 
@@ -20,6 +21,7 @@ def test_save_then_load_round_trips(tmp_path):
         code_root="/Users/x/Code",
         bot_names={"scoutbot"},
         hidden_names={"scratch-repo"},
+        hidden_path_substrings={"sarb_agent_"},
         recap_auth_mode="api_key",
         api_key="sk-test",
     )

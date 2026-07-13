@@ -8,6 +8,10 @@
 <body>
   <h1>Settings</h1>
   <table id="projects"></table>
+  <h2>Hide by path</h2>
+  <p>One substring per line. Any project whose path contains one of these is hidden entirely
+     (useful for bulk-filtering a family of auto-generated directory names).</p>
+  <textarea id="hiddenPathSubstrings" rows="4" cols="40" placeholder="sarb_agent_"></textarea>
   <h2>Recap generation</h2>
   <label><input type="radio" name="auth" value="claude_cli"> Use claude CLI login</label><br>
   <label><input type="radio" name="auth" value="api_key"> Use an API key</label>

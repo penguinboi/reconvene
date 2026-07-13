@@ -27,6 +27,7 @@ def test_settings_edit_and_save_persists_to_disk(page, e2e_server, ccrider_db):
     select.select_option("drop")
     page.locator('input[name="auth"][value="api_key"]').check()
     page.locator("#apiKey").fill("sk-test-123")
+    page.locator("#hiddenPathSubstrings").fill("sarb_agent_\nscratch-")
 
     with page.expect_response(
         lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"
@@ -38,3 +39,4 @@ def test_settings_edit_and_save_persists_to_disk(page, e2e_server, ccrider_db):
     assert reloaded.hidden_names == {"myproject"}
     assert reloaded.recap_auth_mode == "api_key"
     assert reloaded.api_key == "sk-test-123"
+    assert reloaded.hidden_path_substrings == {"sarb_agent_", "scratch-"}

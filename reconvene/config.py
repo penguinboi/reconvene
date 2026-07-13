@@ -12,6 +12,7 @@ class Config:
     code_root: str | None = None
     bot_names: set[str] = field(default_factory=set)
     hidden_names: set[str] = field(default_factory=set)
+    hidden_path_substrings: set[str] = field(default_factory=set)
     recap_auth_mode: str = "claude_cli"
     api_key: str | None = None
 
@@ -19,6 +20,7 @@ class Config:
         d = asdict(self)
         d["bot_names"] = sorted(self.bot_names)
         d["hidden_names"] = sorted(self.hidden_names)
+        d["hidden_path_substrings"] = sorted(self.hidden_path_substrings)
         return d
 
     @classmethod
@@ -27,6 +29,7 @@ class Config:
             code_root=d.get("code_root"),
             bot_names=set(d.get("bot_names", [])),
             hidden_names=set(d.get("hidden_names", [])),
+            hidden_path_substrings=set(d.get("hidden_path_substrings", [])),
             recap_auth_mode=d.get("recap_auth_mode", "claude_cli"),
             api_key=d.get("api_key"),
         )

@@ -21,6 +21,9 @@ def classify_category(project_path: str, config, message_count: int | None = Non
     for sub in DROP_SUBSTRINGS:
         if sub in project_path:
             return "drop"
+    for sub in config.hidden_path_substrings:
+        if sub in project_path:
+            return "drop"
     name = canonical_name(project_path)
     if name in config.hidden_names:
         return "drop"

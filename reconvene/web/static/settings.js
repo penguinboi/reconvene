@@ -19,6 +19,7 @@ async function loadSettings() {
   const authRadio = document.querySelector(`input[name="auth"][value="${data.config.recap_auth_mode}"]`);
   if (authRadio) authRadio.checked = true;
   document.getElementById("apiKey").value = data.config.api_key || "";
+  document.getElementById("hiddenPathSubstrings").value = data.config.hidden_path_substrings.join("\n");
 }
 
 document.getElementById("save").addEventListener("click", async () => {
@@ -28,6 +29,10 @@ document.getElementById("save").addEventListener("click", async () => {
     if (select.value === "bot") botNames.push(select.dataset.name);
     if (select.value === "drop") hiddenNames.push(select.dataset.name);
   }
+  const hiddenPathSubstrings = document.getElementById("hiddenPathSubstrings").value
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
   const authMode = document.querySelector('input[name="auth"]:checked').value;
   await fetch("/api/settings", {
     method: "POST",
@@ -35,6 +40,7 @@ document.getElementById("save").addEventListener("click", async () => {
     body: JSON.stringify({
       bot_names: botNames,
       hidden_names: hiddenNames,
+      hidden_path_substrings: hiddenPathSubstrings,
       recap_auth_mode: authMode,
       api_key: document.getElementById("apiKey").value || null,
     }),
