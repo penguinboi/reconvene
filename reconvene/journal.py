@@ -1,7 +1,7 @@
 # ABOUTME: Rolls classified sessions into ranked per-project journal entries.
 # ABOUTME: Real projects and bot projects are returned as two separately-sorted lists.
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .classify import classify_category, canonical_name
 from .db import Session
@@ -27,8 +27,11 @@ class Project:
 
 
 def recency_bucket(last_active: str, now: datetime | None = None) -> str:
-    now = now or datetime.now()
-    updated = datetime.strptime(last_active, "%Y-%m-%d %H:%M:%S")
+    # ccrider's real timestamps are UTC and carry fractional seconds plus a "+0000 UTC"
+    # suffix (Go's default time.Time.String() format); only the leading "YYYY-MM-DD HH:MM:SS"
+    # is fixed-width and parsed, so both that format and the simpler one used by tests work.
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    updated = datetime.strptime(last_active[:19], "%Y-%m-%d %H:%M:%S")
     delta = (now - updated).total_seconds()
     if delta <= 24 * 3600:
         return "active"

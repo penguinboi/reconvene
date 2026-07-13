@@ -1,6 +1,6 @@
 # ABOUTME: Tests for journal model — grouping, splitting, and ranking sessions.
 # ABOUTME: Verifies project aggregation, real vs bot classification, and recency ranking.
-from datetime import datetime
+from datetime import datetime, timezone
 
 from reconvene.config import Config
 from reconvene.db import Session
@@ -73,6 +73,17 @@ def test_recency_bucket_stale_long_ago():
 
 
 def test_recency_bucket_defaults_now_to_current_time():
-    # No `now` passed — exercises the real datetime.now() default path.
-    recent = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # No `now` passed — exercises the real default-clock path. Must be UTC, matching
+    # ccrider's real timestamps (see test below) -- a local-time default would silently
+    # misclassify recency by the local UTC offset.
+    recent = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
     assert recency_bucket(recent) == "active"
+
+
+def test_recency_bucket_handles_real_ccrider_timestamp_format():
+    # ccrider's real `updated_at` values include fractional seconds and a "+0000 UTC"
+    # suffix (Go's default time.Time.String() format), e.g. "2026-07-13 10:12:17.839 +0000 UTC" --
+    # not the simplified "YYYY-MM-DD HH:MM:SS" the rest of this file's fixtures use.
+    # Reproduces a real ValueError crash seen against live production data.
+    now = datetime(2026, 7, 13, 10, 12, 20)
+    assert recency_bucket("2026-07-13 10:12:17.839 +0000 UTC", now=now) == "active"
