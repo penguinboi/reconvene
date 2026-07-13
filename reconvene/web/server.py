@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from ..config import save_config
 from ..db import load_sessions
-from ..journal import build_journal
+from ..journal import build_journal, recency_bucket
 from ..recap import RecapCache, ensure_recaps, first_user_message
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -20,6 +20,7 @@ def _project_summary(p, db_path):
         "category": p.category,
         "count": p.count,
         "last_active": p.last_active,
+        "recency": recency_bucket(p.last_active),
         "latest_session_id": p.latest.session_id,
         "oneline": first_user_message(db_path, p.latest.session_id) or "(no recap)",
     }
