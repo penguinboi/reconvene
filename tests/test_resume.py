@@ -19,6 +19,7 @@ def test_open_terminal_and_resume_runs_osascript():
     assert captured["cmd"][1] == "-e"
     script = captured["cmd"][2]
     assert "Terminal" in script
+    assert "activate" in script  # brings the new window to the foreground, not just spawns it silently
     assert "/Users/x/Code/myproject" in script
     assert "claude --resume abc123" in script
     assert captured["check"] is True

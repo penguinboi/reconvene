@@ -11,5 +11,10 @@ def resume_command(session_id: str) -> list[str]:
 
 def open_terminal_and_resume(session_id: str, cwd: str, runner=subprocess.run) -> None:
     command = " ".join(resume_command(session_id))
-    script = f'tell application "Terminal" to do script "cd {shlex.quote(cwd)} && {command}"'
+    script = (
+        'tell application "Terminal"\n'
+        "  activate\n"
+        f'  do script "cd {shlex.quote(cwd)} && {command}"\n'
+        "end tell"
+    )
     runner(["osascript", "-e", script], check=True)
