@@ -30,10 +30,15 @@ or to choose how recap generation authenticates with Claude Code.
 ## Testing
 
 ```bash
-pip install -e ".[test]"      # installs pytest-playwright, playwright
-playwright install chromium   # one-time browser binary download, not a pip package
-pytest tests/                 # runs everything: unit, HTTP-integration, and E2E tests
+python3 -m venv .venv
+.venv/bin/pip install -e ".[test]"
+PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/playwright install chromium
+PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/
 ```
+
+A project-local venv sidesteps PEP 668 "externally-managed-environment" errors on
+Homebrew/distro Python installs, and `PLAYWRIGHT_BROWSERS_PATH` keeps the downloaded
+browser binary inside the project directory instead of the shared home-directory cache.
 
 E2E tests (`tests/e2e/`) drive a real browser against a real running server instance, with the
 `claude` CLI and Terminal-launch automation always faked — no real subprocess or window is ever
