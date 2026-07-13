@@ -6,6 +6,9 @@ requires-python = ">=3.11"
 [project.scripts]
 reconvene = "reconvene.cli:main"
 
+[project.optional-dependencies]
+test = ["playwright", "pytest-playwright"]
+
 [build-system]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
