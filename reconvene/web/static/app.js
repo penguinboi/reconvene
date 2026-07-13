@@ -9,11 +9,15 @@ function showError(message) {
   el.textContent = message;
 }
 
-function showConfirmModal(project, fullRecap) {
+const fullRecaps = new Map(); // project name -> full recap text, populated only once actually fetched
+
+function showConfirmModal(project) {
   document.getElementById("modalProjectName").textContent = project.name;
-  document.getElementById("modalFullRecap").textContent = fullRecap;
+  document.getElementById("modalFullRecap").textContent =
+    fullRecaps.get(project.name) || "Loading full summary…";
   const modal = document.getElementById("confirmModal");
   modal.dataset.sessionId = project.latest_session_id;
+  modal.dataset.projectName = project.name;
   modal.classList.remove("hidden");
 }
 
@@ -35,14 +39,17 @@ async function loadJournal() {
     metaEl.textContent = project.oneline;
     div.innerHTML = `<strong>${project.name}</strong> · ${project.count} sessions`;
     div.appendChild(metaEl);
-    let fullRecap = project.oneline;
-    div.addEventListener("click", () => showConfirmModal(project, fullRecap));
+    div.addEventListener("click", () => showConfirmModal(project));
     el.appendChild(div);
     fetch(`/api/recap/${project.name}`)
       .then((r) => r.json())
       .then((recap) => {
         metaEl.textContent = recap.oneline;
-        fullRecap = recap.full;
+        fullRecaps.set(project.name, recap.full);
+        const modal = document.getElementById("confirmModal");
+        if (!modal.classList.contains("hidden") && modal.dataset.projectName === project.name) {
+          document.getElementById("modalFullRecap").textContent = recap.full;
+        }
       })
       .catch((err) => console.error(`Failed to fetch recap for ${project.name}:`, err));
   }

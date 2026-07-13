@@ -1,8 +1,36 @@
 # ABOUTME: E2E tests for the journal page — real render, async recap fill-in, resume success/failure.
 # ABOUTME: Verifies what only a real browser can prove: the page actually shows what the API returns.
+import threading
 import time
 
+from reconvene.config import Config, save_config
+from reconvene.web.server import serve
 from tests.conftest import add_session, add_message
+
+
+def _start_server_with_recap_runner(tmp_path, ccrider_db, recap_runner):
+    # A test-local server (not the shared e2e_server fixture) so a slow recap_runner can delay a
+    # response without touching the shared fixture other tests depend on. The delay runs on the
+    # *server's* own thread pool -- a separate process from Playwright's driver -- so it never
+    # blocks Playwright's own commands the way a time.sleep() inside a page.route() handler would
+    # (that blocks the whole sync driver thread; nothing else, not even .wait_for()/.click(),
+    # can run until it returns).
+    config_path = tmp_path / "config.json"
+    config = Config()
+    save_config(config, config_path)
+    server = serve(
+        config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path),
+        lambda sid, cwd: None, recap_runner=recap_runner, port=0,
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    return server, base_url
+
+
+def _slow_recap_runner(prompt):
+    time.sleep(0.3)
+    return "ONELINE: full recap text\nDETAIL: full recap text"
 
 
 def test_journal_renders_project_card(page, e2e_server, ccrider_db):
@@ -18,24 +46,22 @@ def test_journal_renders_project_card(page, e2e_server, ccrider_db):
     assert "1 sessions" in text  # app.js doesn't pluralize "sessions" — this is the real rendered text, not a typo
 
 
-def test_recap_fills_in_asynchronously(page, e2e_server, ccrider_db):
-    base_url, resumed, config, config_path = e2e_server
+def test_recap_fills_in_asynchronously(page, tmp_path, ccrider_db):
     add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
 
-    def delay_recap_response(route):
-        time.sleep(0.1)  # guarantees the fast fallback text is observable before the recap replaces it
-        route.continue_()
-
-    page.route("**/api/recap/**", delay_recap_response)
-
-    page.goto(base_url)
-    meta = page.locator(".project .meta")
-    meta.wait_for()
-    assert "wire up thresholds" in meta.inner_text()  # fast fallback shows first
-    page.wait_for_function(
-        "document.querySelector('.project .meta').textContent.includes('full recap text')"
-    )
+    server, base_url = _start_server_with_recap_runner(tmp_path, ccrider_db, _slow_recap_runner)
+    try:
+        page.goto(base_url)
+        meta = page.locator(".project .meta")
+        meta.wait_for()
+        assert "wire up thresholds" in meta.inner_text()  # fast fallback shows first
+        page.wait_for_function(
+            "document.querySelector('.project .meta').textContent.includes('full recap text')"
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_clicking_card_shows_confirm_modal_with_full_recap(page, e2e_server, ccrider_db):
@@ -55,6 +81,28 @@ def test_clicking_card_shows_confirm_modal_with_full_recap(page, e2e_server, ccr
     assert "myproject" in page.locator("#modalProjectName").inner_text()
     assert "full recap text" in page.locator("#modalFullRecap").inner_text()
     assert resumed == []  # clicking the card alone must not resume anything yet
+
+
+def test_modal_shows_loading_placeholder_then_updates_when_recap_arrives(page, tmp_path, ccrider_db):
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+
+    server, base_url = _start_server_with_recap_runner(tmp_path, ccrider_db, _slow_recap_runner)
+    try:
+        page.goto(base_url)
+        meta = page.locator(".project .meta")
+        meta.wait_for()
+        assert "wire up thresholds" in meta.inner_text()  # confirms we're still in the pre-recap window
+        page.locator(".project").click()
+        modal_text = page.locator("#modalFullRecap")
+        modal_text.wait_for()
+        assert modal_text.inner_text() == "Loading full summary…"
+        page.wait_for_function(
+            "document.getElementById('modalFullRecap').textContent.includes('full recap text')"
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_clicking_card_alone_does_not_resume(page, e2e_server, ccrider_db):
