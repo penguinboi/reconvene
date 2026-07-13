@@ -2,6 +2,7 @@
 # ABOUTME: Verifies what only a real browser can prove: the page actually shows what the API returns.
 import threading
 import time
+from datetime import datetime, timedelta
 
 from reconvene.config import Config, save_config
 from reconvene.web.server import serve
@@ -44,6 +45,35 @@ def test_journal_renders_project_card(page, e2e_server, ccrider_db):
     text = card.inner_text()
     assert "myproject" in text
     assert "1 sessions" in text  # app.js doesn't pluralize "sessions" — this is the real rendered text, not a typo
+
+
+def test_journal_shows_empty_state_when_no_real_projects(page, e2e_server):
+    base_url, resumed, config, config_path = e2e_server
+
+    page.goto(base_url)
+    placeholder = page.locator(".placeholder")
+    placeholder.wait_for()
+    assert "resume some Claude Code sessions" in placeholder.inner_text()
+    assert page.locator(".project").count() == 0
+
+
+def test_journal_renders_recency_dots(page, e2e_server, ccrider_db):
+    now = datetime.now()
+    add_session(ccrider_db, "s1", "/Users/x/Code/activeproject",
+                now.strftime("%Y-%m-%d %H:%M:%S"), message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+    add_session(ccrider_db, "s2", "/Users/x/Code/staleproject",
+                (now - timedelta(days=30)).strftime("%Y-%m-%d %H:%M:%S"), message_count=12)
+    add_message(ccrider_db, "s2", "user", "old work", sequence=1)
+
+    base_url, resumed, config, config_path = e2e_server
+    page.goto(base_url)
+    page.locator(".project").first.wait_for()
+
+    active_card = page.locator(".project", has_text="activeproject")
+    stale_card = page.locator(".project", has_text="staleproject")
+    assert active_card.locator(".dot-active").count() == 1
+    assert stale_card.locator(".dot-stale").count() == 1
 
 
 def test_recap_fills_in_asynchronously(page, tmp_path, ccrider_db):

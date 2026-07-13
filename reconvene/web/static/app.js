@@ -30,6 +30,14 @@ async function loadJournal() {
   const data = await res.json();
   const el = document.getElementById("journal");
   el.innerHTML = "";
+  el.classList.remove("placeholder");
+
+  if (data.real.length === 0) {
+    el.classList.add("placeholder");
+    el.textContent = "No projects yet — resume some Claude Code sessions and they'll show up here.";
+    return;
+  }
+
   for (const project of data.real) {
     const div = document.createElement("div");
     div.className = "project";
@@ -37,7 +45,8 @@ async function loadJournal() {
     const metaEl = document.createElement("div");
     metaEl.className = "meta";
     metaEl.textContent = project.oneline;
-    div.innerHTML = `<strong>${project.name}</strong> · ${project.count} sessions`;
+    div.innerHTML = `<span class="dot dot-${project.recency}"></span>` +
+      `<strong>${project.name}</strong> <span class="count">· ${project.count} sessions</span>`;
     div.appendChild(metaEl);
     div.addEventListener("click", () => showConfirmModal(project));
     el.appendChild(div);
