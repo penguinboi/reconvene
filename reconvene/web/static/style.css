@@ -1,3 +1,5 @@
+/* ABOUTME: Color tokens, typography, and component styles for Reconvene's journal and settings pages. */
+/* ABOUTME: Terminal palette following system light/dark preference; no manual theme toggle. */
 :root {
   --bg: #ffffff;
   --card-bg: #f6f8fa;
@@ -9,7 +11,7 @@
   --link: #0969da;
   --dot-active: #1a7f37;
   --dot-recent: #9a6700;
-  --dot-stale: #57606a;
+  --dot-stale: var(--text-muted);
   --error-bg: #fdecea;
   --error-text: #611a15;
   --error-border: #f5c6cb;
@@ -27,7 +29,7 @@
     --link: #58a6ff;
     --dot-active: #3fb950;
     --dot-recent: #d29922;
-    --dot-stale: #8b949e;
+    --dot-stale: var(--text-muted);
     --error-bg: #3d1418;
     --error-text: #ffb3ad;
     --error-border: #6e2530;

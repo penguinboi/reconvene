@@ -1,3 +1,5 @@
+// ABOUTME: Renders the settings page — classification overrides, recap auth, resume preferences.
+// ABOUTME: Loads and saves via GET/POST /api/settings on the local server.
 let projects = [];
 
 async function loadSettings() {

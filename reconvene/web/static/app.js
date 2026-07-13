@@ -1,3 +1,5 @@
+// ABOUTME: Renders the journal page — project cards, async recap fill-in, resume confirm modal.
+// ABOUTME: Talks to /api/journal, /api/recap/<name>, and /api/resume/<session> on the local server.
 function showError(message) {
   let el = document.getElementById("error");
   if (!el) {
