@@ -58,6 +58,31 @@ def relative_time(last_active: str, now: datetime | None = None) -> str:
     return f"{int(delta // (365 * 86400))}y ago"
 
 
+def verbose_age(last_active: str, now: datetime | None = None) -> str:
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    updated = datetime.strptime(last_active[:19], "%Y-%m-%d %H:%M:%S")
+    delta = (now - updated).total_seconds()
+    if delta < 60:
+        return "just now"
+    if delta < 3600:
+        n = int(delta // 60)
+        return f"{n} minute{'s' if n != 1 else ''} ago"
+    if delta < 24 * 3600:
+        n = int(delta // 3600)
+        return f"{n} hour{'s' if n != 1 else ''} ago"
+    days = int(delta // (24 * 3600))
+    if days < 7:
+        return f"{days} day{'s' if days != 1 else ''} ago"
+    if days < 30:
+        n = days // 7
+        return f"{n} week{'s' if n != 1 else ''} ago"
+    if days < 365:
+        n = days // 30
+        return f"{n} month{'s' if n != 1 else ''} ago"
+    n = days // 365
+    return f"{n} year{'s' if n != 1 else ''} ago"
+
+
 def abbreviate_home(path: str, home: str | None = None) -> str:
     home = home if home is not None else str(Path.home())
     if path == home:

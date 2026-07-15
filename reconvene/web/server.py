@@ -114,7 +114,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                     self._send_json(404, {"error": f"no session {session_id!r}"})
                     return
                 try:
-                    resumer(session_id, match.project_path)
+                    resumer(session_id, match.project_path, match.updated_at)
                 except Exception as e:
                     self._send_json(500, {"error": str(e)})
                     return

@@ -30,8 +30,8 @@ def _start_server(tmp_path, ccrider_db, resumer):
 def e2e_server(tmp_path, ccrider_db):
     resumed = []
 
-    def fake_resumer(session_id, cwd):
-        resumed.append((session_id, cwd))
+    def fake_resumer(session_id, cwd, updated_at):
+        resumed.append((session_id, cwd, updated_at))
 
     server, base_url, config, config_path = _start_server(tmp_path, ccrider_db, fake_resumer)
     yield base_url, resumed, config, config_path
@@ -43,7 +43,7 @@ def e2e_server(tmp_path, ccrider_db):
 def e2e_server_failing_resume(tmp_path, ccrider_db):
     resumed = []
 
-    def failing_resumer(session_id, cwd):
+    def failing_resumer(session_id, cwd, updated_at):
         raise RuntimeError("could not open Terminal")
 
     server, base_url, config, config_path = _start_server(tmp_path, ccrider_db, failing_resumer)

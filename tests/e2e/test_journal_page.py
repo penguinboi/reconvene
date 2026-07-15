@@ -186,7 +186,7 @@ def test_confirm_dispatches_resume(page, e2e_server, ccrider_db):
     response = resp_info.value
     assert response.status == 200
     assert response.json() == {"status": "resumed"}
-    assert resumed == [("s1", "/Users/x/Code/myproject")]
+    assert resumed == [("s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00")]
     assert page.locator("#confirmModal").is_hidden()
 
 

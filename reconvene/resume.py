@@ -3,12 +3,26 @@
 # ABOUTME: the caller is a web server that must keep running to serve other requests).
 import shlex
 import subprocess
+from datetime import datetime
+
+from .journal import verbose_age
 
 
-def resume_command(session_id: str, extra_args: str = "") -> list[str]:
+def resume_prompt(updated_at: str, now: datetime | None = None) -> str:
+    return (
+        f"Resuming session from {updated_at[:19]}.\n\n"
+        f"IMPORTANT: This session has been inactive for {verbose_age(updated_at, now)}. "
+        "Before proceeding: check git status, look around to understand what changed, "
+        "and be careful not to overwrite any work in progress."
+    )
+
+
+def resume_command(session_id: str, updated_at: str, extra_args: str = "",
+                    now: datetime | None = None) -> list[str]:
     cmd = ["claude", "--resume", session_id]
     if extra_args:
         cmd.extend(shlex.split(extra_args))
+    cmd.append(resume_prompt(updated_at, now))
     return cmd
 
 
@@ -33,9 +47,11 @@ def _iterm2_script(cwd: str, command: str) -> str:
     )
 
 
-def open_terminal_and_resume(session_id: str, cwd: str, config=None, runner=subprocess.run) -> None:
+def open_terminal_and_resume(session_id: str, cwd: str, updated_at: str, config=None,
+                              runner=subprocess.run, now: datetime | None = None) -> None:
     terminal_app = config.terminal_app if config else "Terminal"
     extra_args = config.claude_extra_args if config else ""
-    command = " ".join(resume_command(session_id, extra_args))
+    argv = resume_command(session_id, updated_at, extra_args, now)
+    command = " ".join(shlex.quote(part) for part in argv)
     script = _iterm2_script(cwd, command) if terminal_app == "iTerm2" else _terminal_script(cwd, command)
     runner(["osascript", "-e", script], check=True)

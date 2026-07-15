@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from reconvene.config import Config
 from reconvene.db import Session
-from reconvene.journal import abbreviate_home, build_journal, recency_bucket, relative_time
+from reconvene.journal import abbreviate_home, build_journal, recency_bucket, relative_time, verbose_age
 
 
 def S(sid, path, updated, message_count=10):
@@ -196,3 +196,49 @@ def test_abbreviate_home_does_not_match_sibling_dir_with_shared_prefix():
     # "/Users/fake2" starts with the string "/Users/fake" but is a different directory —
     # must not be treated as being under "/Users/fake".
     assert abbreviate_home("/Users/fake2/Code", home="/Users/fake") == "/Users/fake2/Code"
+
+
+def test_verbose_age_just_now_under_a_minute():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert verbose_age("2026-07-15 11:59:30", now=now) == "just now"
+
+
+def test_verbose_age_minutes_singular_and_plural():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert verbose_age("2026-07-15 11:59:00", now=now) == "1 minute ago"
+    assert verbose_age("2026-07-15 11:30:00", now=now) == "30 minutes ago"
+
+
+def test_verbose_age_hours_singular_and_plural():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert verbose_age("2026-07-15 11:00:00", now=now) == "1 hour ago"
+    assert verbose_age("2026-07-15 09:00:00", now=now) == "3 hours ago"
+
+
+def test_verbose_age_days_singular_and_plural():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert verbose_age("2026-07-14 12:00:00", now=now) == "1 day ago"
+    assert verbose_age("2026-07-13 12:00:00", now=now) == "2 days ago"
+
+
+def test_verbose_age_weeks_singular_and_plural():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert verbose_age("2026-07-08 12:00:00", now=now) == "1 week ago"
+    assert verbose_age("2026-06-24 12:00:00", now=now) == "3 weeks ago"
+
+
+def test_verbose_age_months_singular_and_plural():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert verbose_age("2026-06-13 12:00:00", now=now) == "1 month ago"
+    assert verbose_age("2026-05-15 12:00:00", now=now) == "2 months ago"
+
+
+def test_verbose_age_years_singular_and_plural():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert verbose_age("2025-07-15 12:00:00", now=now) == "1 year ago"
+    assert verbose_age("2024-07-15 12:00:00", now=now) == "2 years ago"
+
+
+def test_verbose_age_handles_real_ccrider_timestamp_format():
+    now = datetime(2026, 7, 13, 10, 12, 20)
+    assert verbose_age("2026-07-13 10:12:17.839 +0000 UTC", now=now) == "just now"

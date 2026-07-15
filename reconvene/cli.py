@@ -54,7 +54,7 @@ def main(argv=None) -> int:
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    resumer = lambda session_id, cwd: open_terminal_and_resume(session_id, cwd, config)
+    resumer = lambda session_id, cwd, updated_at: open_terminal_and_resume(session_id, cwd, updated_at, config)
     server = serve(config, args.db, args.cache, args.config, resumer, port=port)
     url = f"http://127.0.0.1:{port}"
     print(f"Reconvene running at {url}")

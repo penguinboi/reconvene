@@ -18,8 +18,8 @@ def running_server(tmp_path, ccrider_db):
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
     resumed = []
-    def fake_resumer(session_id, cwd):
-        resumed.append((session_id, cwd))
+    def fake_resumer(session_id, cwd, updated_at):
+        resumed.append((session_id, cwd, updated_at))
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
                    fake_resumer, recap_runner=fake_recap_runner, port=0)
@@ -68,7 +68,7 @@ def test_resume_calls_resumer_with_session_and_path(running_server):
     with urllib.request.urlopen(req) as resp:
         data = json.loads(resp.read())
     assert data["status"] == "resumed"
-    assert resumed == [("r1", "/Users/x/Code/myproject")]
+    assert resumed == [("r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00")]
 
 
 def test_resume_unknown_session_is_404(running_server):
@@ -84,7 +84,7 @@ def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
     add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
-    def failing_resumer(session_id, cwd):
+    def failing_resumer(session_id, cwd, updated_at):
         raise RuntimeError("osascript not found")
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
@@ -123,7 +123,7 @@ def test_recap_endpoint_excerpt_is_truncated_to_three_sentences(tmp_path, ccride
         "DETAIL: Sentence one. Sentence two. Sentence three. Sentence four. Sentence five."
     )
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
-                   lambda s, c: None, recap_runner=fake_recap_runner, port=0)
+                   lambda s, c, u: None, recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -158,7 +158,7 @@ def test_settings_post_saves_overrides(tmp_path, ccrider_db):
     config = Config()
     config_path = str(tmp_path / "config.json")
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), config_path, lambda s, c: None,
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), config_path, lambda s, c, u: None,
                    recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -188,7 +188,7 @@ def test_settings_post_persists_to_configured_path_not_real_config(tmp_path, ccr
     config = Config()
     config_path = tmp_path / "config.json"
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c: None,
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c, u: None,
                    recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -219,7 +219,7 @@ def test_settings_post_saves_terminal_app_and_extra_args(tmp_path, ccrider_db):
     config = Config()
     config_path = tmp_path / "config.json"
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c: None,
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c, u: None,
                    recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -253,7 +253,7 @@ def test_settings_post_saves_hidden_path_substrings(tmp_path, ccrider_db):
     config = Config()
     config_path = tmp_path / "config.json"
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
-    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c: None,
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path), lambda s, c, u: None,
                    recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -284,7 +284,7 @@ def test_api_journal_includes_recency_bucket(tmp_path, ccrider_db):
     config = Config()
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
-                   lambda s, c: None, recap_runner=fake_recap_runner, port=0)
+                   lambda s, c, u: None, recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -303,7 +303,7 @@ def test_api_journal_includes_last_active_relative_and_cwd(tmp_path, ccrider_db)
     config = Config()
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
-                   lambda s, c: None, recap_runner=fake_recap_runner, port=0)
+                   lambda s, c, u: None, recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
