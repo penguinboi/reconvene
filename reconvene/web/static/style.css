@@ -71,7 +71,6 @@ a:hover {
 
 @media (prefers-reduced-motion: reduce) {
   .cursor { animation: none; }
-  .project:hover, button:hover { transform: none; }
 }
 
 .topbar {
@@ -246,4 +245,8 @@ table td, table th {
 .modal-content p {
   white-space: pre-wrap;
   color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project:hover, button:hover { transform: none; }
 }
