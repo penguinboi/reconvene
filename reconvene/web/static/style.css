@@ -201,7 +201,8 @@ input[type="text"], select, textarea {
 }
 
 input[type="text"]:focus, select:focus, textarea:focus {
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--accent-glow);
 }
@@ -247,6 +248,8 @@ table td, table th {
   color: var(--text-muted);
 }
 
+/* Must stay last: .project:hover/button:hover are defined above and win any
+   specificity tie by source order, so this override has to come after them. */
 @media (prefers-reduced-motion: reduce) {
   .project:hover, button:hover { transform: none; }
 }
