@@ -111,6 +111,29 @@ def test_recap_endpoint_returns_derived_recap_without_llm(running_server):
         data = json.loads(resp.read())
     assert data["oneline"] == "test recap"
     assert data["full"] == "test"
+    assert data["excerpt"] == "test"
+
+
+def test_recap_endpoint_excerpt_is_truncated_to_three_sentences(tmp_path, ccrider_db):
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config()
+    fake_recap_runner = lambda prompt: (
+        "ONELINE: test recap\n"
+        "DETAIL: Sentence one. Sentence two. Sentence three. Sentence four. Sentence five."
+    )
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
+                   lambda s, c: None, recap_runner=fake_recap_runner, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        with urllib.request.urlopen(f"{base_url}/api/recap/myproject") as resp:
+            data = json.loads(resp.read())
+        assert data["excerpt"] == "Sentence one. Sentence two. Sentence three."
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 def test_recap_endpoint_unknown_project_is_404(running_server):

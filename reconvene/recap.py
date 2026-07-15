@@ -2,6 +2,7 @@
 # ABOUTME: Cache is keyed by project + a signature of the included sessions so grown sessions refresh.
 import hashlib
 import os
+import re
 import sqlite3
 import subprocess
 import tempfile
@@ -83,6 +84,11 @@ def parse_recap(output: str) -> tuple[str, str]:
         first = next((l for l in output.splitlines() if l.strip()), "")
         oneline = first.strip()[:90]
     return oneline, (detail or oneline)
+
+
+def excerpt(detail: str, sentences: int = 3) -> str:
+    parts = [p for p in re.split(r"(?<=[.!?])\s+", detail.strip()) if p]
+    return " ".join(parts[:sentences])
 
 
 def first_user_message(db_path, session_id, limit=90) -> str:

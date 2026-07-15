@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from ..config import save_config
 from ..db import load_sessions
 from ..journal import build_journal, recency_bucket
-from ..recap import RecapCache, ensure_recaps, first_user_message
+from ..recap import RecapCache, ensure_recaps, excerpt, first_user_message
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -83,7 +83,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 finally:
                     cache.close()
                 oneline, full = recaps.get(project.name, ("", "(no recap)"))
-                self._send_json(200, {"oneline": oneline, "full": full})
+                self._send_json(200, {"oneline": oneline, "full": full, "excerpt": excerpt(full)})
                 return
             if path == "/api/settings":
                 sessions = load_sessions(db_path)

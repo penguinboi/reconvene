@@ -5,7 +5,7 @@ import tempfile
 from reconvene.config import Config
 from reconvene.db import Session
 from reconvene.journal import Project
-from reconvene.recap import build_prompt, claude_runner, ensure_recaps, generate_recap, RecapCache
+from reconvene.recap import build_prompt, claude_runner, ensure_recaps, excerpt, generate_recap, RecapCache
 
 
 def _project(db, name):
@@ -96,6 +96,25 @@ def test_claude_runner_runs_in_neutral_cwd(monkeypatch):
     monkeypatch.setattr("reconvene.recap.subprocess.run", fake_run)
     claude_runner("a prompt", Config())
     assert captured["cwd"] == tempfile.gettempdir()
+
+
+def test_excerpt_returns_first_three_sentences():
+    detail = "Sentence one. Sentence two. Sentence three. Sentence four. Sentence five."
+    assert excerpt(detail) == "Sentence one. Sentence two. Sentence three."
+
+
+def test_excerpt_returns_whole_text_when_fewer_sentences_than_limit():
+    detail = "Only one sentence here."
+    assert excerpt(detail) == "Only one sentence here."
+
+
+def test_excerpt_collapses_newlines_between_sentences():
+    detail = "Sentence one.\nSentence two.\n\nSentence three. Sentence four."
+    assert excerpt(detail) == "Sentence one. Sentence two. Sentence three."
+
+
+def test_excerpt_handles_empty_string():
+    assert excerpt("") == ""
 
 
 def test_claude_runner_sets_api_key_when_configured(monkeypatch):

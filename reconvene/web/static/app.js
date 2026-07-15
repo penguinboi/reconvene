@@ -55,7 +55,7 @@ async function loadJournal() {
     fetch(`/api/recap/${project.name}`)
       .then((r) => r.json())
       .then((recap) => {
-        metaEl.textContent = recap.oneline;
+        metaEl.textContent = recap.excerpt;
         fullRecaps.set(project.name, recap.full);
         const modal = document.getElementById("confirmModal");
         if (!modal.classList.contains("hidden") && modal.dataset.projectName === project.name) {
