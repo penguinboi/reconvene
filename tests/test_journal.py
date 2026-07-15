@@ -127,6 +127,59 @@ def test_relative_time_handles_real_ccrider_timestamp_format():
     assert relative_time("2026-07-13 10:12:17.839 +0000 UTC", now=now) == "just now"
 
 
+# Boundary tests for relative_time: exactly at threshold vs just below
+# (exercises all 5 comparison thresholds: 60s, 3600s, 86400s, 2592000s, 31536000s)
+
+def test_relative_time_59_seconds_stays_just_now():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-15 11:59:01", now=now) == "just now"
+
+
+def test_relative_time_60_seconds_crosses_to_minutes():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-15 11:59:00", now=now) == "1m ago"
+
+
+def test_relative_time_3599_seconds_stays_in_minutes():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-15 11:00:01", now=now) == "59m ago"
+
+
+def test_relative_time_3600_seconds_crosses_to_hours():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-15 11:00:00", now=now) == "1h ago"
+
+
+def test_relative_time_86399_seconds_stays_in_hours():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-14 12:00:01", now=now) == "23h ago"
+
+
+def test_relative_time_86400_seconds_crosses_to_days():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-14 12:00:00", now=now) == "1d ago"
+
+
+def test_relative_time_2591999_seconds_stays_in_days():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-06-15 12:00:01", now=now) == "29d ago"
+
+
+def test_relative_time_2592000_seconds_crosses_to_months():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-06-15 12:00:00", now=now) == "1mo ago"
+
+
+def test_relative_time_31535999_seconds_stays_in_months():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2025-07-15 12:00:01", now=now) == "12mo ago"
+
+
+def test_relative_time_31536000_seconds_crosses_to_years():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2025-07-15 12:00:00", now=now) == "1y ago"
+
+
 def test_abbreviate_home_collapses_home_prefix():
     assert abbreviate_home("/Users/fake/Code/foo", home="/Users/fake") == "~/Code/foo"
 
