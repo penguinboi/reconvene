@@ -2,6 +2,7 @@
 # ABOUTME: Real projects and bot projects are returned as two separately-sorted lists.
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .classify import classify_category, canonical_name
 from .db import Session
@@ -38,6 +39,32 @@ def recency_bucket(last_active: str, now: datetime | None = None) -> str:
     if delta <= 7 * 24 * 3600:
         return "recent"
     return "stale"
+
+
+def relative_time(last_active: str, now: datetime | None = None) -> str:
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
+    updated = datetime.strptime(last_active[:19], "%Y-%m-%d %H:%M:%S")
+    delta = (now - updated).total_seconds()
+    if delta < 60:
+        return "just now"
+    if delta < 3600:
+        return f"{int(delta // 60)}m ago"
+    if delta < 86400:
+        return f"{int(delta // 3600)}h ago"
+    if delta < 30 * 86400:
+        return f"{int(delta // 86400)}d ago"
+    if delta < 365 * 86400:
+        return f"{int(delta // (30 * 86400))}mo ago"
+    return f"{int(delta // (365 * 86400))}y ago"
+
+
+def abbreviate_home(path: str, home: str | None = None) -> str:
+    home = home if home is not None else str(Path.home())
+    if path == home:
+        return "~"
+    if path.startswith(home + "/"):
+        return "~" + path[len(home):]
+    return path
 
 
 def build_journal(sessions, config):

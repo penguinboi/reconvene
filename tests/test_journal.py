@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from reconvene.config import Config
 from reconvene.db import Session
-from reconvene.journal import build_journal, recency_bucket
+from reconvene.journal import abbreviate_home, build_journal, recency_bucket, relative_time
 
 
 def S(sid, path, updated, message_count=10):
@@ -87,3 +87,59 @@ def test_recency_bucket_handles_real_ccrider_timestamp_format():
     # Reproduces a real ValueError crash seen against live production data.
     now = datetime(2026, 7, 13, 10, 12, 20)
     assert recency_bucket("2026-07-13 10:12:17.839 +0000 UTC", now=now) == "active"
+
+
+def test_relative_time_just_now_under_a_minute():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-15 11:59:30", now=now) == "just now"
+
+
+def test_relative_time_minutes_ago():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-15 11:58:00", now=now) == "2m ago"
+
+
+def test_relative_time_hours_ago():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-15 09:00:00", now=now) == "3h ago"
+
+
+def test_relative_time_days_ago():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-07-13 12:00:00", now=now) == "2d ago"
+
+
+def test_relative_time_months_ago():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2026-05-15 12:00:00", now=now) == "2mo ago"
+
+
+def test_relative_time_years_ago():
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    assert relative_time("2024-07-15 12:00:00", now=now) == "2y ago"
+
+
+def test_relative_time_handles_real_ccrider_timestamp_format():
+    # Same fractional-seconds + "+0000 UTC" format that once crashed recency_bucket
+    # (see the test-fixtures-mirror-real-schema lesson) — relative_time must not
+    # reintroduce that bug.
+    now = datetime(2026, 7, 13, 10, 12, 20)
+    assert relative_time("2026-07-13 10:12:17.839 +0000 UTC", now=now) == "just now"
+
+
+def test_abbreviate_home_collapses_home_prefix():
+    assert abbreviate_home("/Users/fake/Code/foo", home="/Users/fake") == "~/Code/foo"
+
+
+def test_abbreviate_home_exact_home_path():
+    assert abbreviate_home("/Users/fake", home="/Users/fake") == "~"
+
+
+def test_abbreviate_home_leaves_unrelated_path_unchanged():
+    assert abbreviate_home("/opt/other/path", home="/Users/fake") == "/opt/other/path"
+
+
+def test_abbreviate_home_does_not_match_sibling_dir_with_shared_prefix():
+    # "/Users/fake2" starts with the string "/Users/fake" but is a different directory —
+    # must not be treated as being under "/Users/fake".
+    assert abbreviate_home("/Users/fake2/Code", home="/Users/fake") == "/Users/fake2/Code"
