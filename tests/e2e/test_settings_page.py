@@ -4,6 +4,13 @@ from reconvene.config import load_config
 from tests.conftest import add_session, add_message
 
 
+def test_topbar_journal_nav_present_on_settings(page, e2e_server):
+    base_url, resumed, config, config_path = e2e_server
+    page.goto(f"{base_url}/settings.html")
+    page.locator(".topbar").wait_for()
+    assert page.locator(".topbar a", has_text="Journal").count() == 1
+
+
 def test_settings_shows_existing_classification_override(page, e2e_server, ccrider_db):
     base_url, resumed, config, config_path = e2e_server
     add_session(ccrider_db, "s1", "/Users/x/Code/scoutbot", "2026-07-08 00:00:00", message_count=2)

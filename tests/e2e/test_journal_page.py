@@ -48,6 +48,14 @@ def test_journal_renders_project_card(page, e2e_server, ccrider_db):
     assert page.locator("h1 .cursor").count() == 1
 
 
+def test_topbar_home_link_and_settings_nav_present(page, e2e_server):
+    base_url, resumed, config, config_path = e2e_server
+    page.goto(base_url)
+    page.locator(".topbar").wait_for()
+    assert page.locator(".topbar-home").get_attribute("href") == "/"
+    assert page.locator(".topbar a", has_text="Settings").get_attribute("href") == "/settings.html"
+
+
 def test_journal_shows_empty_state_when_no_real_projects(page, e2e_server):
     base_url, resumed, config, config_path = e2e_server
 

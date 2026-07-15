@@ -67,6 +67,41 @@ a {
   .cursor { animation: none; }
 }
 
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-home {
+  text-decoration: none;
+}
+
+.topbar-home:hover {
+  text-decoration: none;
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 1.3rem;
+  color: var(--text);
+}
+
+.panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.panel h2 {
+  margin-top: 0;
+}
+
 .dot {
   display: inline-block;
   width: 8px;
