@@ -44,11 +44,15 @@ async function loadJournal() {
     const div = document.createElement("div");
     div.className = "project";
     div.dataset.sessionId = project.latest_session_id;
+    const metaLineEl = document.createElement("div");
+    metaLineEl.className = "meta-line";
+    metaLineEl.textContent = `${project.last_active_relative} · ${project.cwd}`;
     const metaEl = document.createElement("div");
     metaEl.className = "meta";
     metaEl.textContent = project.oneline;
     div.innerHTML = `<span class="dot dot-${project.recency}"></span>` +
       `<strong>${project.name}</strong> <span class="count">· ${project.count} sessions</span>`;
+    div.appendChild(metaLineEl);
     div.appendChild(metaEl);
     div.addEventListener("click", () => showConfirmModal(project));
     el.appendChild(div);

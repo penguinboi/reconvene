@@ -77,6 +77,19 @@ def test_journal_renders_recency_dots(page, e2e_server, ccrider_db):
     assert stale_card.locator(".dot-stale").count() == 1
 
 
+def test_journal_card_shows_last_active_time_and_cwd(page, e2e_server, ccrider_db):
+    base_url, resumed, config, config_path = e2e_server
+    add_session(ccrider_db, "s1", "/tmp/some/fake/project", "2020-01-01 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+
+    page.goto(base_url)
+    meta_line = page.locator(".project .meta-line")
+    meta_line.wait_for()
+    text = meta_line.inner_text()
+    assert "y ago" in text
+    assert "/tmp/some/fake/project" in text
+
+
 def test_recap_fills_in_asynchronously(page, tmp_path, ccrider_db):
     add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
