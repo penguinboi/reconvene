@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from ..config import save_config
 from ..db import load_sessions
-from ..journal import build_journal, recency_bucket
+from ..journal import abbreviate_home, build_journal, recency_bucket, relative_time
 from ..recap import RecapCache, ensure_recaps, excerpt, first_user_message
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -21,6 +21,8 @@ def _project_summary(p, db_path):
         "count": p.count,
         "last_active": p.last_active,
         "recency": recency_bucket(p.last_active),
+        "last_active_relative": relative_time(p.last_active),
+        "cwd": abbreviate_home(p.latest.project_path),
         "latest_session_id": p.latest.session_id,
         "oneline": first_user_message(db_path, p.latest.session_id) or "(no recap)",
     }

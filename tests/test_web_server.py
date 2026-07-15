@@ -295,3 +295,23 @@ def test_api_journal_includes_recency_bucket(tmp_path, ccrider_db):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_api_journal_includes_last_active_relative_and_cwd(tmp_path, ccrider_db):
+    add_session(ccrider_db, "r1", "/tmp/some/fake/project", "2020-01-01 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config()
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
+                   lambda s, c: None, recap_runner=fake_recap_runner, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        with urllib.request.urlopen(f"{base_url}/api/journal") as resp:
+            data = json.loads(resp.read())
+        assert data["real"][0]["last_active_relative"].endswith("y ago")
+        assert data["real"][0]["cwd"] == "/tmp/some/fake/project"
+    finally:
+        server.shutdown()
+        server.server_close()
