@@ -23,12 +23,22 @@ def _redacted_config(config):
     return cfg
 
 
+def _client_category(p):
+    # The client's classification vocabulary is real/bot/drop; a user-hidden project is surfaced
+    # as "drop" so its "Hidden" option is pre-selected and it can be toggled back.
+    return "drop" if p.category == "hidden" else p.category
+
+
+def _settings_project(p):
+    # The settings table only renders name + category; skip the per-project first-user-message DB
+    # lookup (and other display fields) that _project_summary does for the journal.
+    return {"name": p.name, "category": _client_category(p)}
+
+
 def _project_summary(p, db_path):
     return {
         "name": p.name,
-        # The client's classification vocabulary is real/bot/drop; a user-hidden project is
-        # surfaced as "drop" so its "Hidden" option is pre-selected and it can be toggled back.
-        "category": "drop" if p.category == "hidden" else p.category,
+        "category": _client_category(p),
         "count": p.count,
         "last_active": p.last_active,
         "recency": recency_bucket(p.last_active),
@@ -129,7 +139,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 sessions = load_sessions(db_path)
                 projects = build_settings_projects(sessions, config)
                 self._send_json(200, {
-                    "projects": [_project_summary(p, db_path) for p in projects],
+                    "projects": [_settings_project(p) for p in projects],
                     "config": _redacted_config(config),
                 })
                 return
