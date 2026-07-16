@@ -56,6 +56,22 @@ def test_topbar_home_link_and_settings_nav_present(page, e2e_server):
     assert page.locator(".topbar a", has_text="Settings").get_attribute("href") == "/settings.html"
 
 
+def test_journal_escapes_html_in_project_name(page, e2e_server, ccrider_db):
+    # A project name is a directory basename from ccrider's DB -- untrusted. It must render as
+    # text, never as HTML, or a maliciously-named directory executes arbitrary JS (which can
+    # then drive /api/settings and /api/resume).
+    base_url, resumed, config, config_path = e2e_server
+    add_session(ccrider_db, "s1", "/Users/x/Code/<img src=x onerror=window.__xss=1>",
+                "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "hi", sequence=1)
+
+    page.goto(base_url)
+    page.locator(".project strong").wait_for()
+    assert page.locator(".project img").count() == 0        # payload not parsed as an element
+    assert page.evaluate("window.__xss") is None            # onerror never fired
+    assert "<img" in page.locator(".project strong").inner_text()  # shown as literal text
+
+
 def test_journal_shows_empty_state_when_no_real_projects(page, e2e_server):
     base_url, resumed, config, config_path = e2e_server
 

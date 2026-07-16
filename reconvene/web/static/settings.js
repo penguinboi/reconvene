@@ -10,12 +10,20 @@ async function loadSettings() {
   table.innerHTML = "";
   for (const p of projects) {
     const row = document.createElement("tr");
-    row.innerHTML = `<td>${p.name}</td><td>
-      <select data-name="${p.name}">
-        <option value="real" ${p.category === "real" ? "selected" : ""}>Real</option>
-        <option value="bot" ${p.category === "bot" ? "selected" : ""}>Automated</option>
-        <option value="drop" ${p.category === "drop" ? "selected" : ""}>Hidden</option>
-      </select></td>`;
+    const nameTd = document.createElement("td");
+    nameTd.textContent = p.name;  // untrusted directory name — set as text, never HTML
+    const selectTd = document.createElement("td");
+    const select = document.createElement("select");
+    select.dataset.name = p.name;
+    for (const [value, label] of [["real", "Real"], ["bot", "Automated"], ["drop", "Hidden"]]) {
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      opt.selected = p.category === value;
+      select.appendChild(opt);
+    }
+    selectTd.appendChild(select);
+    row.append(nameTd, selectTd);
     table.appendChild(row);
   }
   const authRadio = document.querySelector(`input[name="auth"][value="${data.config.recap_auth_mode}"]`);

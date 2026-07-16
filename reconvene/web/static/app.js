@@ -50,8 +50,14 @@ async function loadJournal() {
     const metaEl = document.createElement("div");
     metaEl.className = "meta";
     metaEl.textContent = project.oneline;
-    div.innerHTML = `<span class="dot dot-${project.recency}"></span>` +
-      `<strong>${project.name}</strong> <span class="count">· ${project.count} sessions</span>`;
+    const dot = document.createElement("span");
+    dot.className = `dot dot-${project.recency}`;
+    const nameEl = document.createElement("strong");
+    nameEl.textContent = project.name;  // untrusted directory name — set as text, never HTML
+    const countEl = document.createElement("span");
+    countEl.className = "count";
+    countEl.textContent = ` · ${project.count} sessions`;
+    div.append(dot, nameEl, countEl);
     div.appendChild(metaLineEl);
     div.appendChild(metaEl);
     div.addEventListener("click", () => showConfirmModal(project));

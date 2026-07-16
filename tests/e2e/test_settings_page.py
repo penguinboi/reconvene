@@ -11,6 +11,21 @@ def test_topbar_journal_nav_present_on_settings(page, e2e_server):
     assert page.locator(".topbar a", has_text="Journal").count() == 1
 
 
+def test_settings_escapes_html_in_project_name(page, e2e_server, ccrider_db):
+    # Same untrusted-directory-name XSS surface as the journal page: the settings table must
+    # render the name as text and set data-name as a plain attribute, never parse it as HTML.
+    base_url, resumed, config, config_path = e2e_server
+    add_session(ccrider_db, "s1", "/Users/x/Code/<img src=x onerror=window.__xss=1>",
+                "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "hi", sequence=1)
+
+    page.goto(f"{base_url}/settings.html")
+    page.locator("#projects td").first.wait_for()
+    assert page.locator("#projects img").count() == 0
+    assert page.evaluate("window.__xss") is None
+    assert "<img" in page.locator("#projects td").first.inner_text()
+
+
 def test_settings_shows_existing_classification_override(page, e2e_server, ccrider_db):
     base_url, resumed, config, config_path = e2e_server
     add_session(ccrider_db, "s1", "/Users/x/Code/scoutbot", "2026-07-08 00:00:00", message_count=2)
