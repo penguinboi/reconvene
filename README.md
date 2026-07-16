@@ -8,7 +8,8 @@ projects by recent activity, and lets you pick up where you left off.
 
 - [ccrider](https://github.com/neilberkman/ccrider): `brew install neilberkman/tap/ccrider`
 - The `claude` CLI (Claude Code), logged in
-- macOS (resume opens a new Terminal window via AppleScript)
+- macOS (the web GUI resumes by opening a new Terminal window via AppleScript)
+- [fzf](https://github.com/junegunn/fzf) — only for the terminal picker: `brew install fzf`
 
 ## Install
 
@@ -28,9 +29,14 @@ ln -s "$PWD/bin/reconvene" ~/.local/bin/reconvene
 ## Usage
 
 ```bash
-reconvene              # syncs ccrider, opens your browser to the project journal
+reconvene              # asks: [1] Web view or [2] TUI, then syncs ccrider and opens it
 reconvene --no-sync    # skip the ccrider sync step
+reconvene -b           # TUI: also list automated-runs (bot) projects
 ```
+
+Running `reconvene` in a terminal prompts you to choose the **Web view** (opens your browser to
+the project journal) or the **TUI** (an fzf picker in the terminal that hands off to
+`claude --resume` when you select a session). Non-interactive invocations run the web view.
 
 First run has zero configuration — every project is classified automatically. Visit
 Settings (linked from the main page) to override classification for a specific project,
