@@ -12,6 +12,15 @@ projects by recent activity, and lets you pick up where you left off.
 
 ## Install
 
+Install the `reconvene` command with pipx (recommended — isolated) or pip:
+
+```bash
+pipx install .
+# or: pip install .
+```
+
+Or, to run straight from a checkout without installing, symlink the launcher onto your PATH:
+
 ```bash
 ln -s "$PWD/bin/reconvene" ~/.local/bin/reconvene
 ```
