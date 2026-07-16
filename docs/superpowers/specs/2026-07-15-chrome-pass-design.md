@@ -83,7 +83,7 @@ name/count row and the recap excerpt:
   it. Tested the same way `recency_bucket` is, including a regression test against the real
   ccrider format.
 - **CWD**: the latest session's `project_path`, with the user's home directory prefix collapsed to
-  `~` (e.g. `~/Code/foo` → `~/Code/foo`). A small helper (`abbreviate_home(path, home=None)
+  `~` (e.g. `/Users/you/Code/foo` → `~/Code/foo`). A small helper (`abbreviate_home(path, home=None)
   -> str`) — plain string-prefix replacement; `home` defaults to `str(Path.home())` but is
   injectable (mirroring `recency_bucket`'s `now` parameter) so tests assert against a fixed fake
   home directory rather than depending on whichever machine runs the suite.

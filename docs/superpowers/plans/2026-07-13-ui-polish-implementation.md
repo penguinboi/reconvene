@@ -120,7 +120,7 @@ def test_recency_bucket_defaults_now_to_current_time():
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Code/penguinboisoftware/reconvene && .venv/bin/pytest tests/test_journal.py -v`
+Run: `cd /path/to/reconvene && .venv/bin/pytest tests/test_journal.py -v`
 Expected: the 7 new tests FAIL with `ImportError: cannot import name 'recency_bucket'`.
 
 - [ ] **Step 3: Implement `recency_bucket`**
@@ -164,14 +164,14 @@ def recency_bucket(last_active: str, now: datetime | None = None) -> str:
 
 - [ ] **Step 4: Run tests to verify they pass**
 
-Run: `cd ~/Code/penguinboisoftware/reconvene && .venv/bin/pytest tests/test_journal.py -v`
+Run: `cd /path/to/reconvene && .venv/bin/pytest tests/test_journal.py -v`
 Expected: all tests PASS (existing `test_build_journal_*` tests plus the 7 new `recency_bucket`
 tests).
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Code/penguinboisoftware/reconvene
+cd /path/to/reconvene
 git add reconvene/journal.py tests/test_journal.py
 git commit -m "feat: add recency_bucket for classifying project activity age"
 ```
@@ -222,7 +222,7 @@ the suite runs.)
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd ~/Code/penguinboisoftware/reconvene && .venv/bin/pytest tests/test_web_server.py::test_api_journal_includes_recency_bucket -v`
+Run: `cd /path/to/reconvene && .venv/bin/pytest tests/test_web_server.py::test_api_journal_includes_recency_bucket -v`
 Expected: FAIL with `KeyError: 'recency'`.
 
 - [ ] **Step 3: Implement**
@@ -261,13 +261,13 @@ def _project_summary(p, db_path):
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd ~/Code/penguinboisoftware/reconvene && .venv/bin/pytest tests/test_web_server.py -v`
+Run: `cd /path/to/reconvene && .venv/bin/pytest tests/test_web_server.py -v`
 Expected: all tests PASS, including the new one.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd ~/Code/penguinboisoftware/reconvene
+cd /path/to/reconvene
 git add reconvene/web/server.py tests/test_web_server.py
 git commit -m "feat: expose recency bucket in the journal API response"
 ```
@@ -493,14 +493,14 @@ table td, table th {
 
 - [ ] **Step 2: Run the existing suite to confirm no regressions**
 
-Run: `cd ~/Code/penguinboisoftware/reconvene && PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/ -q`
+Run: `cd /path/to/reconvene && PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/ -q`
 Expected: all tests still PASS — this task changed no markup, ids, or classes that any test
 selects on.
 
 - [ ] **Step 3: Manually verify in a real browser**
 
 ```bash
-cd ~/Code/penguinboisoftware/reconvene
+cd /path/to/reconvene
 .venv/bin/reconvene &
 ```
 
@@ -512,7 +512,7 @@ process (`kill %1` or `fg` + Ctrl-C).
 - [ ] **Step 4: Commit**
 
 ```bash
-cd ~/Code/penguinboisoftware/reconvene
+cd /path/to/reconvene
 git add reconvene/web/static/style.css
 git commit -m "style: re-theme with Terminal palette, system light/dark, mono/sans pairing"
 ```
@@ -574,7 +574,7 @@ def test_journal_renders_recency_dots(page, e2e_server, ccrider_db):
 
 - [ ] **Step 2: Run tests to verify they fail**
 
-Run: `cd ~/Code/penguinboisoftware/reconvene && PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/e2e/test_journal_page.py -v -k "empty_state or recency_dots"`
+Run: `cd /path/to/reconvene && PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/e2e/test_journal_page.py -v -k "empty_state or recency_dots"`
 Expected: `test_journal_shows_empty_state_when_no_real_projects` FAILS (no `.placeholder` element
 exists yet — `loadJournal` currently leaves `#journal` empty when `data.real` is `[]`).
 `test_journal_renders_recency_dots` FAILS (no `.dot-active`/`.dot-stale` elements exist yet).
@@ -703,18 +703,18 @@ async function loadJournal() {
 
 - [ ] **Step 5: Run tests to verify they pass**
 
-Run: `cd ~/Code/penguinboisoftware/reconvene && PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/e2e/test_journal_page.py -v`
+Run: `cd /path/to/reconvene && PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/e2e/test_journal_page.py -v`
 Expected: all tests PASS, including the two new ones.
 
 - [ ] **Step 6: Run the full suite**
 
-Run: `cd ~/Code/penguinboisoftware/reconvene && PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/ -q`
+Run: `cd /path/to/reconvene && PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.playwright-browsers .venv/bin/pytest tests/ -q`
 Expected: all tests PASS (full regression check across unit + HTTP + E2E suites).
 
 - [ ] **Step 7: Manually verify in a real browser**
 
 ```bash
-cd ~/Code/penguinboisoftware/reconvene
+cd /path/to/reconvene
 .venv/bin/reconvene &
 ```
 
@@ -727,7 +727,7 @@ process (`kill %1` or `fg` + Ctrl-C) when done.
 - [ ] **Step 8: Commit**
 
 ```bash
-cd ~/Code/penguinboisoftware/reconvene
+cd /path/to/reconvene
 git add reconvene/web/static/index.html reconvene/web/static/app.js tests/e2e/test_journal_page.py
 git commit -m "feat: add recency dot, prompt cursor, and empty-state message"
 ```
