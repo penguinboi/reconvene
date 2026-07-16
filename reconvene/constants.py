@@ -1,13 +1,20 @@
 # ABOUTME: Paths and tunable constants for reconvene.
 # ABOUTME: No personal project names live here — those go in the user's config.json.
-import tomllib
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 
 
 def _read_version() -> str:
-    pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
-    with pyproject.open("rb") as f:
-        return tomllib.load(f)["project"]["version"]
+    # Prefer installed package metadata. Reading an adjacent pyproject.toml (the old approach)
+    # crashes for any pip/pipx install, since site-packages has no pyproject.toml. Fall back to
+    # the source tree's pyproject only when running uninstalled from a checkout.
+    try:
+        return _pkg_version("reconvene")
+    except PackageNotFoundError:
+        import tomllib
+        pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
+        with pyproject.open("rb") as f:
+            return tomllib.load(f)["project"]["version"]
 
 
 VERSION = _read_version()

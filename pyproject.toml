@@ -13,5 +13,12 @@ test = ["playwright", "pytest-playwright"]
 requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+packages = ["reconvene", "reconvene.web"]
+
+[tool.setuptools.package-data]
+# Ship the web UI assets; without this the installed server serves the API but 404s the pages.
+"reconvene.web" = ["static/*.html", "static/*.css", "static/*.js"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
