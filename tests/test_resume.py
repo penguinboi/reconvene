@@ -7,6 +7,7 @@ import pytest
 from reconvene.config import Config
 from reconvene.resume import (
     _applescript_escape,
+    exec_resume,
     open_terminal_and_resume,
     resume_command,
     resume_prompt,
@@ -141,3 +142,42 @@ def test_open_terminal_and_resume_raises_when_directory_missing(tmp_path):
         raise AssertionError("osascript must not run when the project directory is missing")
     with pytest.raises(FileNotFoundError, match="was-deleted"):
         open_terminal_and_resume("abc123", missing, UPDATED_AT, runner=runner_should_not_run)
+
+
+def test_exec_resume_chdirs_then_execs_claude(tmp_path):
+    d = tmp_path / "proj"
+    d.mkdir()
+    calls = {}
+    exec_resume(
+        "s1", str(d), UPDATED_AT,
+        chdir=lambda p: calls.__setitem__("chdir", p),
+        execvp=lambda file, args: calls.__setitem__("exec", (file, args)),
+    )
+    assert calls["chdir"] == str(d)
+    file, args = calls["exec"]
+    assert file == "claude"
+    assert args[:3] == ["claude", "--resume", "s1"]
+    assert "Resuming session from" in args[-1]  # the injected resume-context prompt
+
+
+def test_exec_resume_includes_configured_extra_args(tmp_path):
+    from reconvene.config import Config
+    d = tmp_path / "proj"
+    d.mkdir()
+    captured = {}
+    exec_resume(
+        "s1", str(d), UPDATED_AT, config=Config(claude_extra_args="--dangerously-skip-permissions"),
+        chdir=lambda p: None,
+        execvp=lambda file, args: captured.__setitem__("args", args),
+    )
+    assert "--dangerously-skip-permissions" in captured["args"]
+
+
+def test_exec_resume_raises_when_directory_missing(tmp_path):
+    missing = str(tmp_path / "gone")  # never created; default path_exists=os.path.isdir
+    called = []
+    with pytest.raises(FileNotFoundError, match="gone"):
+        exec_resume("s1", missing, UPDATED_AT,
+                    chdir=lambda p: called.append("chdir"),
+                    execvp=lambda file, args: called.append("exec"))
+    assert called == []  # neither chdir nor execvp ran

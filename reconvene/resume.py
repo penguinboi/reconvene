@@ -77,3 +77,16 @@ def open_terminal_and_resume(session_id: str, cwd: str, updated_at: str, config=
     shell_command = f"cd {shlex.quote(cwd)} && {command}"
     script = _iterm2_script(shell_command) if terminal_app == "iTerm2" else _terminal_script(shell_command)
     runner(["osascript", "-e", script], check=True)
+
+
+def exec_resume(session_id: str, cwd: str, updated_at: str, config=None,
+                path_exists=os.path.isdir, chdir=os.chdir, execvp=os.execvp) -> None:
+    # Foreground handoff for the TUI: replace this process with `claude --resume` in the
+    # project's directory. Unlike open_terminal_and_resume (which must spawn a window because the
+    # web server keeps running), the TUI is a foreground process, so execvp gives the terminal
+    # straight to Claude. Reuses resume_command so the injected resume-context prompt is identical.
+    if not path_exists(cwd):
+        raise FileNotFoundError(f"project directory no longer exists: {cwd}")
+    extra_args = config.claude_extra_args if config else ""
+    chdir(cwd)
+    execvp("claude", resume_command(session_id, updated_at, extra_args))
