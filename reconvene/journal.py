@@ -27,13 +27,19 @@ class Project:
         return self.latest.updated_at
 
 
-def recency_bucket(last_active: str, now: datetime | None = None) -> str:
+def _age_seconds(last_active: str, now: datetime | None = None) -> float:
     # ccrider's real timestamps are UTC and carry fractional seconds plus a "+0000 UTC"
     # suffix (Go's default time.Time.String() format); only the leading "YYYY-MM-DD HH:MM:SS"
     # is fixed-width and parsed, so both that format and the simpler one used by tests work.
+    # `now` defaults to naive-UTC to match ccrider's UTC timestamps (a local default would
+    # misjudge age by the local UTC offset).
     now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     updated = datetime.strptime(last_active[:19], "%Y-%m-%d %H:%M:%S")
-    delta = (now - updated).total_seconds()
+    return (now - updated).total_seconds()
+
+
+def recency_bucket(last_active: str, now: datetime | None = None) -> str:
+    delta = _age_seconds(last_active, now)
     if delta <= 24 * 3600:
         return "active"
     if delta <= 7 * 24 * 3600:
@@ -42,9 +48,7 @@ def recency_bucket(last_active: str, now: datetime | None = None) -> str:
 
 
 def relative_time(last_active: str, now: datetime | None = None) -> str:
-    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    updated = datetime.strptime(last_active[:19], "%Y-%m-%d %H:%M:%S")
-    delta = (now - updated).total_seconds()
+    delta = _age_seconds(last_active, now)
     if delta < 60:
         return "just now"
     if delta < 3600:
@@ -59,9 +63,7 @@ def relative_time(last_active: str, now: datetime | None = None) -> str:
 
 
 def verbose_age(last_active: str, now: datetime | None = None) -> str:
-    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
-    updated = datetime.strptime(last_active[:19], "%Y-%m-%d %H:%M:%S")
-    delta = (now - updated).total_seconds()
+    delta = _age_seconds(last_active, now)
     if delta < 60:
         return "just now"
     if delta < 3600:
