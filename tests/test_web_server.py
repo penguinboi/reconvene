@@ -143,6 +143,27 @@ def test_recap_endpoint_unknown_project_is_404(running_server):
     assert exc.value.code == 404
 
 
+def test_recap_endpoint_url_decodes_the_project_name(tmp_path, ccrider_db):
+    # A project whose directory name has a space (or #, ?, non-ASCII) arrives percent-encoded.
+    # Without decoding, "my%20app" never matches the project "my app" and the recap 404s forever.
+    add_session(ccrider_db, "r1", "/Users/x/Code/my app", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "hi", sequence=1)
+    config = Config()
+    fake_recap_runner = lambda prompt: "ONELINE: spaced name recap\nDETAIL: detail"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
+                   lambda s, c, u: None, recap_runner=fake_recap_runner, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        with urllib.request.urlopen(f"{base_url}/api/recap/my%20app") as resp:
+            data = json.loads(resp.read())
+        assert data["oneline"] == "spaced name recap"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_settings_get_lists_projects_and_config(running_server):
     base_url, _, _ = running_server
     with urllib.request.urlopen(f"{base_url}/api/settings") as resp:

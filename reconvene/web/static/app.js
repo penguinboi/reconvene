@@ -62,7 +62,7 @@ async function loadJournal() {
     div.appendChild(metaEl);
     div.addEventListener("click", () => showConfirmModal(project));
     el.appendChild(div);
-    fetch(`/api/recap/${project.name}`)
+    fetch(`/api/recap/${encodeURIComponent(project.name)}`)
       .then((r) => r.json())
       .then((recap) => {
         metaEl.textContent = recap.excerpt;

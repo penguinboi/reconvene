@@ -4,7 +4,7 @@ import json
 import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import unquote, urlparse
 
 from ..config import save_config
 from ..db import load_sessions
@@ -108,7 +108,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 })
                 return
             if path.startswith("/api/recap/"):
-                name = path[len("/api/recap/"):]
+                name = unquote(path[len("/api/recap/"):])
                 sessions = load_sessions(db_path)
                 real, bots = build_journal(sessions, config)
                 project = next((p for p in real + bots if p.name == name), None)
