@@ -1,15 +1,12 @@
 # ABOUTME: Terminal frontend — an fzf picker over the ranked journal that hands off to claude --resume.
-# ABOUTME: Mirrors the web GUI's data flow (journal + recaps) but resumes via execvp in the foreground.
+# ABOUTME: Recaps load lazily per highlighted item via an fzf --preview command (reconvene._preview).
 import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
-from pathlib import Path
 
 from .db import load_sessions
 from .journal import abbreviate_home, build_journal, relative_time
-from .recap import RecapCache, ensure_recaps
 from .resume import exec_resume
 
 SEPARATOR_SID = ""
@@ -19,14 +16,14 @@ def render_line(project) -> str:
     return f"{project.name} · {relative_time(project.last_active)} · {project.count} sessions"
 
 
-def render_preview(project, full) -> str:
+def render_header(project) -> str:
     latest = project.latest
-    stats = "\n".join([
+    return "\n".join([
         project.name,
         f"{project.count} sessions · last {relative_time(project.last_active)}",
         f"path  {abbreviate_home(latest.project_path)}",
+        "─" * 46,
     ])
-    return f"{stats}\n{'─' * 46}\n\n{full}"
 
 
 def build_entries(real, bots, show_bots):
@@ -37,21 +34,30 @@ def build_entries(real, bots, show_bots):
     return entries
 
 
-def _make_fzf_picker(tmpdir):
+def _preview_command(db_path, cache_path, config_path) -> str:
+    # fzf substitutes {1} with the highlighted row's hidden session-id column, then runs this per
+    # item and streams its stdout into the preview pane. sys.executable keeps us on the same
+    # interpreter as the running TUI (robust under pipx/venv/system installs).
+    return (
+        f"{shlex.quote(sys.executable)} -m reconvene._preview {{1}} "
+        f"{shlex.quote(db_path)} {shlex.quote(cache_path)} {shlex.quote(config_path)}"
+    )
+
+
+def _make_fzf_picker(preview_cmd):
     def picker(lines):
         proc = subprocess.run(
             ["fzf", "--no-sort", "--layout=reverse", "--border=rounded", "--info=inline",
              "--delimiter", "\t", "--with-nth", "2..",
-             "--preview", "cat " + shlex.quote(tmpdir) + "/{1} 2>/dev/null",
+             "--preview", preview_cmd,
              "--preview-window", "right:65%:wrap"],
             input="\n".join(lines), capture_output=True, text=True,
         )
-        out = proc.stdout.strip()
-        return out or None
+        return proc.stdout.strip() or None
     return picker
 
 
-def run_tui(config, db_path, cache_path, show_bots=False, *, picker=None, resumer=exec_resume) -> int:
+def run_tui(config, db_path, cache_path, config_path, show_bots=False, *, picker=None, resumer=exec_resume) -> int:
     if picker is None and shutil.which("fzf") is None:
         print("reconvene: the terminal picker needs fzf — install it with: brew install fzf",
               file=sys.stderr)
@@ -67,24 +73,11 @@ def run_tui(config, db_path, cache_path, show_bots=False, *, picker=None, resume
             print("No projects found.", file=sys.stderr)
         return 1
 
-    cache = RecapCache(cache_path)
-    try:
-        recaps = ensure_recaps(shown, db_path, cache, config)
-    finally:
-        cache.close()
-
-    tmpdir = tempfile.mkdtemp(prefix="reconvene-")
-    try:
-        for p in shown:
-            full = recaps.get(p.name, ("", "(no recap)"))[1]
-            Path(tmpdir, p.latest.session_id).write_text(render_preview(p, full))
-        entries = build_entries(real, bots, show_bots)
-        sid_to_project = {p.latest.session_id: p for p in shown}
-        lines = [f"{sid}\t{display}" for display, sid in entries]
-        active_picker = picker or _make_fzf_picker(tmpdir)
-        chosen = active_picker(lines)
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    entries = build_entries(real, bots, show_bots)
+    sid_to_project = {p.latest.session_id: p for p in shown}
+    lines = [f"{sid}\t{display}" for display, sid in entries]
+    active_picker = picker or _make_fzf_picker(_preview_command(db_path, cache_path, config_path))
+    chosen = active_picker(lines)
 
     if not chosen:
         return 0

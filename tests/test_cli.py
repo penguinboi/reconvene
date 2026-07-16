@@ -129,6 +129,6 @@ def test_main_tui_passes_bots_flag(tmp_path):
         ["-b", "--no-sync", "--db", str(tmp_path / "x.db"), "--config", str(tmp_path / "c.json")],
         stdin_isatty=True, input_fn=lambda prompt: "2",
         launch_web=lambda *a, **k: 0,
-        launch_tui=lambda config, db, cache, show_bots: captured.setdefault("show_bots", show_bots) or 0,
+        launch_tui=lambda config, db, cache, config_path, show_bots: captured.setdefault("show_bots", show_bots) or 0,
     )
     assert captured["show_bots"] is True

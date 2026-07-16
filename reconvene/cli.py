@@ -93,5 +93,5 @@ def main(argv=None, *, input_fn=input, stdin_isatty=None,
 
     config = load_config(args.config)
     if mode == "tui":
-        return (launch_tui or run_tui)(config, args.db, args.cache, args.bots)
+        return (launch_tui or run_tui)(config, args.db, args.cache, args.config, args.bots)
     return (launch_web or _serve_web)(config, args.db, args.cache, args.config)
