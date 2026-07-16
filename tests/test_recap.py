@@ -82,6 +82,29 @@ def test_ensure_recaps_falls_back_on_runner_error(tmp_path, ccrider_db):
     cache.close()
 
 
+def test_ensure_recaps_surfaces_llm_failure_and_does_not_cache_the_degraded_result(tmp_path, ccrider_db, capsys):
+    # An LLM failure must NOT be silently swallowed, and the degraded first-message fallback must
+    # NOT be cached under the valid signature -- otherwise a transient failure (e.g. a bad key)
+    # sticks as a stale non-LLM recap even after the cause is fixed.
+    p = _project(ccrider_db, "myproject")
+    cache = RecapCache(tmp_path / "r.db")
+    config = Config()  # claude_cli -> use_llm True
+    calls = []
+    def flaky(prompt):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("claude failed")
+        return "ONELINE: real recap\nDETAIL: real detail"
+
+    r1 = ensure_recaps([p], ccrider_db, cache, config, runner=flaky)
+    assert r1["myproject"][0].startswith("do the thing")   # degraded fallback returned this run
+    assert "failed" in capsys.readouterr().err             # error surfaced, not swallowed
+
+    r2 = ensure_recaps([p], ccrider_db, cache, config, runner=flaky)
+    assert r2["myproject"][0] == "real recap"              # regenerated: the degraded result was not cached
+    cache.close()
+
+
 def test_claude_runner_runs_in_neutral_cwd(monkeypatch):
     captured = {}
 

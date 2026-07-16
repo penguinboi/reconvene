@@ -5,6 +5,7 @@ import os
 import re
 import sqlite3
 import subprocess
+import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -139,19 +140,27 @@ def ensure_recaps(projects, db_path, cache, config, runner=None, concurrency=REC
             todo.append((p, sig))
 
     def work(item):
+        # Returns (name, sig, recap, cacheable). A degraded fallback after an LLM failure is
+        # returned for display but NOT cacheable, so a later successful run regenerates it rather
+        # than the stale fallback sticking under the (still-valid) session signature.
         p, sig = item
+        if not use_llm:
+            return p.name, sig, derive_recap(p, db_path), True
         try:
-            recap = generate_recap(p, db_path, active_runner) if use_llm else derive_recap(p, db_path)
-        except Exception:
+            return p.name, sig, generate_recap(p, db_path, active_runner), True
+        except Exception as e:
+            print(f"reconvene: recap for {p.name!r} failed ({e}); showing a basic summary instead",
+                  file=sys.stderr)
             try:
-                recap = derive_recap(p, db_path)
+                fallback = derive_recap(p, db_path)
             except Exception:
-                recap = ("(recap failed)", "(recap failed)")
-        return p.name, sig, recap
+                fallback = ("(recap failed)", "(recap failed)")
+            return p.name, sig, fallback, False
 
     if todo:
         with ThreadPoolExecutor(max_workers=concurrency) as ex:
-            for name, sig, recap in ex.map(work, todo):
-                cache.put(name, sig, recap[0], recap[1])
+            for name, sig, recap, cacheable in ex.map(work, todo):
+                if cacheable:
+                    cache.put(name, sig, recap[0], recap[1])
                 results[name] = recap
     return results
