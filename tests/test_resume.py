@@ -51,7 +51,8 @@ def test_open_terminal_and_resume_runs_osascript():
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
         captured["check"] = check
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=fake_runner)
+    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=fake_runner,
+                             path_exists=lambda p: True)
     assert captured["cmd"][0] == "osascript"
     assert captured["cmd"][1] == "-e"
     script = captured["cmd"][2]
@@ -67,7 +68,8 @@ def test_open_terminal_and_resume_raises_on_failure():
     def failing_runner(cmd, check):
         raise RuntimeError("osascript not found")
     with pytest.raises(RuntimeError, match="osascript not found"):
-        open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=failing_runner)
+        open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=failing_runner,
+                                 path_exists=lambda p: True)
 
 
 def test_open_terminal_and_resume_uses_iterm2_when_configured():
@@ -75,7 +77,8 @@ def test_open_terminal_and_resume_uses_iterm2_when_configured():
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
     config = Config(terminal_app="iTerm2")
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, config=config, runner=fake_runner)
+    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, config=config, runner=fake_runner,
+                             path_exists=lambda p: True)
     script = captured["cmd"][2]
     assert "iTerm2" in script
     assert "activate" in script
@@ -88,7 +91,8 @@ def test_open_terminal_and_resume_appends_configured_extra_args():
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
     config = Config(claude_extra_args="--dangerously-skip-permissions")
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, config=config, runner=fake_runner)
+    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, config=config, runner=fake_runner,
+                             path_exists=lambda p: True)
     script = captured["cmd"][2]
     assert "claude --resume abc123 --dangerously-skip-permissions" in script
 
@@ -106,7 +110,8 @@ def test_open_terminal_and_resume_escapes_prompt_newlines_for_applescript():
     captured = {}
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=fake_runner, now=NOW)
+    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=fake_runner, now=NOW,
+                             path_exists=lambda p: True)
     script = captured["cmd"][2]
     assert "\n\n" not in script      # no raw blank line leaked into the AppleScript literal
     assert "\\n\\n" in script        # the prompt's blank line is present, escaped
@@ -120,7 +125,19 @@ def test_open_terminal_and_resume_escapes_double_quote_in_cwd():
     captured = {}
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
-    open_terminal_and_resume("abc123", '/Users/x/Code/proj"evil', UPDATED_AT, runner=fake_runner)
+    open_terminal_and_resume("abc123", '/Users/x/Code/proj"evil', UPDATED_AT, runner=fake_runner,
+                             path_exists=lambda p: True)
     script = captured["cmd"][2]
     assert 'proj\\"evil' in script    # the path's quote is AppleScript-escaped
     assert 'proj"evil' not in script  # no unescaped quote that could terminate the literal
+
+
+def test_open_terminal_and_resume_raises_when_directory_missing(tmp_path):
+    # If the project directory was deleted/renamed, `cd <dir> && claude` would silently no-op in
+    # the terminal while osascript still exits 0. Refuse to launch, so the server surfaces an
+    # error instead of falsely reporting the session resumed.
+    missing = str(tmp_path / "was-deleted")  # never created; uses the real os.path.isdir default
+    def runner_should_not_run(cmd, check):
+        raise AssertionError("osascript must not run when the project directory is missing")
+    with pytest.raises(FileNotFoundError, match="was-deleted"):
+        open_terminal_and_resume("abc123", missing, UPDATED_AT, runner=runner_should_not_run)

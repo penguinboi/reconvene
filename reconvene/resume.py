@@ -1,6 +1,7 @@
 # ABOUTME: Builds the argv that hands a chosen session back to Claude Code to resume.
 # ABOUTME: open_terminal_and_resume opens a new Terminal.app or iTerm2 window (no execvp —
 # ABOUTME: the caller is a web server that must keep running to serve other requests).
+import os
 import shlex
 import subprocess
 from datetime import datetime
@@ -63,7 +64,12 @@ def _iterm2_script(shell_command: str) -> str:
 
 
 def open_terminal_and_resume(session_id: str, cwd: str, updated_at: str, config=None,
-                              runner=subprocess.run, now: datetime | None = None) -> None:
+                              runner=subprocess.run, now: datetime | None = None,
+                              path_exists=os.path.isdir) -> None:
+    if not path_exists(cwd):
+        # `cd <cwd> && claude` would silently no-op if the directory is gone (osascript still
+        # exits 0), so the caller would falsely believe the session resumed. Fail loudly instead.
+        raise FileNotFoundError(f"project directory no longer exists: {cwd}")
     terminal_app = config.terminal_app if config else "Terminal"
     extra_args = config.claude_extra_args if config else ""
     argv = resume_command(session_id, updated_at, extra_args, now)
