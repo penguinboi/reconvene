@@ -446,3 +446,30 @@ def test_post_without_origin_succeeds(running_server):
     )
     with urllib.request.urlopen(req) as resp:
         assert resp.status == 200
+
+
+def test_static_path_with_foreign_host_is_forbidden(running_server):
+    # Exercises the bare-403 branch of _forbidden (a non-/api path), not just the JSON branch.
+    base_url, _, _ = running_server
+    req = urllib.request.Request(f"{base_url}/", headers={"Host": "evil.example"})
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(req)
+    assert exc.value.code == 403
+
+
+def test_post_with_localhost_host_and_origin_succeeds(running_server):
+    # The allowlist accepts localhost as well as 127.0.0.1; confirm that branch end-to-end.
+    base_url, _, config = running_server
+    port = base_url.rsplit(":", 1)[1]
+    payload = json.dumps({
+        "bot_names": ["myproject"], "hidden_names": [],
+        "recap_auth_mode": "none", "api_key": None,
+    }).encode()
+    req = urllib.request.Request(
+        f"{base_url}/api/settings", method="POST", data=payload,
+        headers={"Content-Type": "application/json",
+                 "Host": f"localhost:{port}", "Origin": f"http://localhost:{port}"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
+    assert config.bot_names == {"myproject"}
