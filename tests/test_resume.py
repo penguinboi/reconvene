@@ -1,12 +1,16 @@
 # ABOUTME: Tests for building the resume command and the macOS terminal-launch automation.
 # ABOUTME: Injects a fake subprocess runner so no real Terminal window is ever opened in tests.
-import shlex
 from datetime import datetime
 
 import pytest
 
 from reconvene.config import Config
-from reconvene.resume import open_terminal_and_resume, resume_command, resume_prompt
+from reconvene.resume import (
+    _applescript_escape,
+    open_terminal_and_resume,
+    resume_command,
+    resume_prompt,
+)
 
 UPDATED_AT = "2026-07-15 10:00:00"
 NOW = datetime(2026, 7, 15, 10, 6, 0)
@@ -89,13 +93,34 @@ def test_open_terminal_and_resume_appends_configured_extra_args():
     assert "claude --resume abc123 --dangerously-skip-permissions" in script
 
 
-def test_open_terminal_and_resume_shell_quotes_the_multiline_prompt():
-    # The injected prompt contains spaces and an embedded blank line -- naively joining argv
-    # elements with a bare space (as this used to do) would produce invalid/broken shell text
-    # once "typed" into a real Terminal/iTerm2 session. Each argv element must be shell-quoted.
+def test_applescript_escape_neutralizes_quotes_backslashes_newlines():
+    assert _applescript_escape('say "hi"') == 'say \\"hi\\"'
+    assert _applescript_escape("a\\b") == "a\\\\b"
+    assert _applescript_escape("line1\nline2") == "line1\\nline2"
+
+
+def test_open_terminal_and_resume_escapes_prompt_newlines_for_applescript():
+    # AppleScript string literals cannot contain raw newlines; the injected prompt's blank
+    # line (\n\n) would otherwise make `do script "..."` fail to compile. It must be escaped
+    # to backslash-n so no raw double-newline survives inside the script.
     captured = {}
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
     open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=fake_runner, now=NOW)
     script = captured["cmd"][2]
-    assert shlex.quote(resume_prompt(UPDATED_AT, NOW)) in script
+    assert "\n\n" not in script      # no raw blank line leaked into the AppleScript literal
+    assert "\\n\\n" in script        # the prompt's blank line is present, escaped
+
+
+def test_open_terminal_and_resume_escapes_double_quote_in_cwd():
+    # A project path containing a double quote must not break out of the AppleScript
+    # `do script "..."` string literal (which would let the remainder run as AppleScript --
+    # arbitrary command execution). The quote must be escaped for the AppleScript layer, not
+    # just the shell layer (shlex.quote leaves a `"` literal inside its single quotes).
+    captured = {}
+    def fake_runner(cmd, check):
+        captured["cmd"] = cmd
+    open_terminal_and_resume("abc123", '/Users/x/Code/proj"evil', UPDATED_AT, runner=fake_runner)
+    script = captured["cmd"][2]
+    assert 'proj\\"evil' in script    # the path's quote is AppleScript-escaped
+    assert 'proj"evil' not in script  # no unescaped quote that could terminate the literal

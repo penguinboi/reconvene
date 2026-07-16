@@ -26,22 +26,37 @@ def resume_command(session_id: str, updated_at: str, extra_args: str = "",
     return cmd
 
 
-def _terminal_script(cwd: str, command: str) -> str:
+def _applescript_escape(s: str) -> str:
+    # Escape a string for embedding inside an AppleScript double-quoted literal. shlex.quote
+    # makes the shell command shell-safe, but that string still lands inside `do script "..."`,
+    # so a literal `"` or `\` from a project path would break out of the AppleScript string
+    # (a command-injection vector); raw newlines/tabs are outright illegal in the literal and
+    # would make osascript fail to compile.
+    return (
+        s.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .replace("\t", "\\t")
+    )
+
+
+def _terminal_script(shell_command: str) -> str:
     return (
         'tell application "Terminal"\n'
         "  activate\n"
-        f'  do script "cd {shlex.quote(cwd)} && {command}"\n'
+        f'  do script "{_applescript_escape(shell_command)}"\n'
         "end tell"
     )
 
 
-def _iterm2_script(cwd: str, command: str) -> str:
+def _iterm2_script(shell_command: str) -> str:
     return (
         'tell application "iTerm2"\n'
         "  activate\n"
         "  set newWindow to (create window with default profile)\n"
         "  tell current session of newWindow\n"
-        f'    write text "cd {shlex.quote(cwd)} && {command}"\n'
+        f'    write text "{_applescript_escape(shell_command)}"\n'
         "  end tell\n"
         "end tell"
     )
@@ -53,5 +68,6 @@ def open_terminal_and_resume(session_id: str, cwd: str, updated_at: str, config=
     extra_args = config.claude_extra_args if config else ""
     argv = resume_command(session_id, updated_at, extra_args, now)
     command = " ".join(shlex.quote(part) for part in argv)
-    script = _iterm2_script(cwd, command) if terminal_app == "iTerm2" else _terminal_script(cwd, command)
+    shell_command = f"cd {shlex.quote(cwd)} && {command}"
+    script = _iterm2_script(shell_command) if terminal_app == "iTerm2" else _terminal_script(shell_command)
     runner(["osascript", "-e", script], check=True)
