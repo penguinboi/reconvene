@@ -50,6 +50,30 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             self.end_headers()
             self.wfile.write(body)
 
+        def _request_is_trusted(self):
+            # Reject cross-origin and DNS-rebinding requests. The Host allowlist (all requests)
+            # stops rebinding -- a rebound request still carries the attacker's hostname; the
+            # Origin check (state-changing POSTs) stops classic CSRF. Absent Origin is allowed:
+            # only non-browser clients omit it, and they aren't a CSRF vector.
+            port = self.server.server_port
+            allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+            if self.headers.get("Host") not in allowed_hosts:
+                return False
+            if self.command == "POST":
+                origin = self.headers.get("Origin")
+                allowed_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+                if origin is not None and origin not in allowed_origins:
+                    return False
+            return True
+
+        def _forbidden(self):
+            path = urlparse(self.path).path
+            if path.startswith("/api/"):
+                self._send_json(403, {"error": "forbidden"})
+            else:
+                self.send_response(403)
+                self.end_headers()
+
         def _send_static(self, rel_path):
             file_path = (STATIC_DIR / rel_path).resolve()
             try:
@@ -71,6 +95,9 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             self.wfile.write(body)
 
         def do_GET(self):
+            if not self._request_is_trusted():
+                self._forbidden()
+                return
             path = urlparse(self.path).path
             if path == "/api/journal":
                 sessions = load_sessions(db_path)
@@ -108,6 +135,9 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             self._send_static(rel_path)
 
         def do_POST(self):
+            if not self._request_is_trusted():
+                self._forbidden()
+                return
             path = urlparse(self.path).path
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length) if length else b"{}"

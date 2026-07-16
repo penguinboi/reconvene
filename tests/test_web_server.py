@@ -367,3 +367,82 @@ def test_api_journal_includes_last_active_relative_and_cwd(tmp_path, ccrider_db)
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_post_with_foreign_origin_is_forbidden(running_server):
+    # Classic CSRF: a cross-origin POST carries the attacker's Origin. It must be rejected
+    # before the config is touched.
+    base_url, _, config = running_server
+    before = set(config.bot_names)
+    payload = json.dumps({
+        "bot_names": ["myproject"], "hidden_names": [],
+        "recap_auth_mode": "none", "api_key": None,
+    }).encode()
+    req = urllib.request.Request(
+        f"{base_url}/api/settings", method="POST", data=payload,
+        headers={"Content-Type": "application/json", "Origin": "https://evil.example"},
+    )
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(req)
+    assert exc.value.code == 403
+    assert config.bot_names == before  # config was not poisoned
+
+
+def test_get_with_foreign_host_is_forbidden(running_server):
+    # DNS rebinding: the rebound request still carries the attacker's hostname in Host.
+    base_url, _, _ = running_server
+    req = urllib.request.Request(f"{base_url}/api/journal", headers={"Host": "evil.example"})
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(req)
+    assert exc.value.code == 403
+
+
+def test_post_with_foreign_host_is_forbidden(running_server):
+    # The Host allowlist guards writes too, not just reads.
+    base_url, _, config = running_server
+    before = set(config.bot_names)
+    payload = json.dumps({
+        "bot_names": ["myproject"], "hidden_names": [],
+        "recap_auth_mode": "none", "api_key": None,
+    }).encode()
+    req = urllib.request.Request(
+        f"{base_url}/api/settings", method="POST", data=payload,
+        headers={"Content-Type": "application/json", "Host": "evil.example"},
+    )
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(req)
+    assert exc.value.code == 403
+    assert config.bot_names == before
+
+
+def test_post_with_matching_origin_succeeds(running_server):
+    # The real UI flow: a same-origin POST carrying the correct Host and a matching Origin.
+    base_url, _, config = running_server
+    port = base_url.rsplit(":", 1)[1]
+    payload = json.dumps({
+        "bot_names": ["myproject"], "hidden_names": [],
+        "recap_auth_mode": "none", "api_key": None,
+    }).encode()
+    req = urllib.request.Request(
+        f"{base_url}/api/settings", method="POST", data=payload,
+        headers={"Content-Type": "application/json", "Origin": f"http://127.0.0.1:{port}"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
+    assert config.bot_names == {"myproject"}
+
+
+def test_post_without_origin_succeeds(running_server):
+    # Non-browser clients omit Origin; the Host allowlist still applies, but absence of Origin
+    # is deliberately allowed (documented choice).
+    base_url, _, _ = running_server
+    payload = json.dumps({
+        "bot_names": [], "hidden_names": [],
+        "recap_auth_mode": "none", "api_key": None,
+    }).encode()
+    req = urllib.request.Request(
+        f"{base_url}/api/settings", method="POST", data=payload,
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
