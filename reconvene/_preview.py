@@ -1,0 +1,55 @@
+# ABOUTME: fzf --preview target — prints one project's stats header + recap on demand.
+# ABOUTME: Cache-first; generates (via claude) only on a miss, so the TUI never blocks up front.
+import sys
+
+from .config import load_config
+from .constants import RECENT_SESSIONS_FOR_RECAP
+from .db import load_sessions
+from .journal import build_journal
+from .recap import RecapCache, ensure_recaps, signature
+from .tui import render_header
+
+
+def _find_project(config, db_path, session_id):
+    real, bots = build_journal(load_sessions(db_path), config)
+    return next((p for p in real + bots if p.latest.session_id == session_id), None)
+
+
+def _recap_body(project, db_path, cache_path, config, recaps_fn):
+    cache = RecapCache(cache_path)
+    try:
+        sig = signature(project.sessions[:RECENT_SESSIONS_FOR_RECAP])
+        hit = cache.get(project.name, sig)
+        if hit is not None:
+            return hit[1]
+        print("⏳ generating recap…", flush=True)
+        result = recaps_fn([project], db_path, cache, config)
+        return result.get(project.name, ("", "(no recap)"))[1]
+    finally:
+        cache.close()
+
+
+def main(argv, *, recaps_fn=ensure_recaps) -> int:
+    session_id, db_path, cache_path, config_path = argv[0], argv[1], argv[2], argv[3]
+    try:
+        config = load_config(config_path)
+        project = _find_project(config, db_path, session_id)
+    except Exception as e:
+        # Bad db/config path etc. — never dump a traceback into the preview pane.
+        print(f"⚠ recap unavailable: {e}")
+        return 0
+    if project is None:
+        print("(project not found)")
+        return 0
+    print(render_header(project), flush=True)
+    print()  # blank line between header and body
+    try:
+        body = _recap_body(project, db_path, cache_path, config, recaps_fn)
+    except Exception as e:
+        body = f"⚠ recap unavailable: {e}"
+    print(body)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))
