@@ -4,6 +4,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 from .db import load_sessions
 from .journal import abbreviate_home, build_journal, relative_time
@@ -37,9 +38,13 @@ def build_entries(real, bots, show_bots):
 def _preview_command(db_path, cache_path, config_path) -> str:
     # fzf substitutes {1} with the highlighted row's hidden session-id column, then runs this per
     # item and streams its stdout into the preview pane. sys.executable keeps us on the same
-    # interpreter as the running TUI (robust under pipx/venv/system installs).
+    # interpreter as the running TUI. PYTHONPATH points the child at the package root so
+    # `-m reconvene._preview` imports even under a bare `bin/reconvene` symlink install (whose
+    # runtime sys.path insert a subprocess would not inherit); harmless under a pip/pipx install.
+    pkg_root = str(Path(__file__).resolve().parent.parent)
     return (
-        f"{shlex.quote(sys.executable)} -m reconvene._preview {{1}} "
+        f"PYTHONPATH={shlex.quote(pkg_root)} {shlex.quote(sys.executable)} "
+        f"-m reconvene._preview {{1}} "
         f"{shlex.quote(db_path)} {shlex.quote(cache_path)} {shlex.quote(config_path)}"
     )
 

@@ -132,11 +132,16 @@ def test_run_tui_missing_fzf_returns_1(tmp_path, ccrider_db, monkeypatch):
 
 def test_preview_command_references_the_preview_module_and_paths():
     import sys as _sys
+    from pathlib import Path as _Path
     cmd = tui._preview_command("/db/sessions.db", "/cache/recaps.db", "/cfg/config.json")
     assert _sys.executable in cmd
     assert "-m reconvene._preview" in cmd
     assert "{1}" in cmd  # fzf substitutes the hidden session-id column
     assert "/db/sessions.db" in cmd and "/cache/recaps.db" in cmd and "/cfg/config.json" in cmd
+    # PYTHONPATH points the subprocess at the package root so it imports under any install mode
+    # (including a bare bin/reconvene symlink, whose runtime sys.path insert a child won't inherit).
+    pkg_root = str(_Path(tui.__file__).resolve().parent.parent)
+    assert f"PYTHONPATH={pkg_root}" in cmd or f"PYTHONPATH='{pkg_root}'" in cmd
 
 
 def test_run_tui_does_not_generate_recaps_up_front(tmp_path, ccrider_db, monkeypatch):
