@@ -130,3 +130,22 @@ def test_claude_runner_sets_api_key_when_configured(monkeypatch):
     monkeypatch.setattr("reconvene.recap.subprocess.run", fake_run)
     claude_runner("a prompt", Config(recap_auth_mode="api_key", api_key="sk-test"))
     assert captured["env"]["ANTHROPIC_API_KEY"] == "sk-test"
+
+
+def test_claude_runner_strips_inherited_api_key_in_cli_mode(monkeypatch):
+    # Default claude_cli mode must run recaps on the user's Claude subscription. If the user
+    # has ANTHROPIC_API_KEY exported in their shell, an inherited key would silently bill their
+    # API account per-token instead -- so it must be stripped from the child env.
+    captured = {}
+
+    def fake_run(cmd, capture_output, text, env, timeout, cwd):
+        captured["env"] = env
+        class Result:
+            returncode = 0
+            stdout = "ONELINE: ok\nDETAIL: ok"
+        return Result()
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-inherited-from-shell")
+    monkeypatch.setattr("reconvene.recap.subprocess.run", fake_run)
+    claude_runner("a prompt", Config())  # default recap_auth_mode="claude_cli"
+    assert "ANTHROPIC_API_KEY" not in captured["env"]

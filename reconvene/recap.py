@@ -106,6 +106,10 @@ def claude_runner(prompt, config, model=MODEL, timeout=120) -> str:
     env = dict(os.environ)
     if config.recap_auth_mode == "api_key" and config.api_key:
         env["ANTHROPIC_API_KEY"] = config.api_key
+    else:
+        # Subscription mode: drop any ANTHROPIC_API_KEY inherited from the user's shell so
+        # recaps run on the Claude subscription, not silently billed per-token to their API account.
+        env.pop("ANTHROPIC_API_KEY", None)
     proc = subprocess.run(
         ["claude", "-p", "--model", model, prompt],
         capture_output=True, text=True, env=env, timeout=timeout,
