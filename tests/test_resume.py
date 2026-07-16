@@ -161,7 +161,6 @@ def test_exec_resume_chdirs_then_execs_claude(tmp_path):
 
 
 def test_exec_resume_includes_configured_extra_args(tmp_path):
-    from reconvene.config import Config
     d = tmp_path / "proj"
     d.mkdir()
     captured = {}

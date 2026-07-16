@@ -28,7 +28,7 @@ def find_free_port(preferred=4242, tries=10) -> int:
     raise RuntimeError(f"no free port found in range {preferred}-{preferred + tries - 1}")
 
 
-def _choose_frontend(input_fn=input):
+def _choose_frontend(input_fn=input) -> str | None:
     print("Reconvene")
     print("  [1] Web view")
     print("  [2] TUI")

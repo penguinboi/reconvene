@@ -89,6 +89,10 @@ def test_run_tui_empty_returns_1(tmp_path, ccrider_db):
 
 
 def test_run_tui_bots_hidden_without_flag(tmp_path, ccrider_db):
+    # A real project keeps the view non-empty so the picker is genuinely invoked; the bot must
+    # not appear in the lines without -b.
+    add_session(ccrider_db, "r1", "/Users/x/Code/realproj", "2026-07-08 00:00:00", message_count=40)
+    add_message(ccrider_db, "r1", "user", "real work", sequence=1)
     add_session(ccrider_db, "b1", "/Users/x/Code/scoutbot", "2026-07-09 00:00:00", message_count=2)
     add_message(ccrider_db, "b1", "user", "score idea", sequence=1)
     seen = {}
@@ -98,7 +102,24 @@ def test_run_tui_bots_hidden_without_flag(tmp_path, ccrider_db):
         picker=lambda lines: seen.setdefault("lines", lines) and None,
         resumer=lambda *a: None,
     )
-    assert all("scoutbot" not in l for l in seen["lines"])  # bot section not shown
+    assert any("realproj" in l for l in seen["lines"])      # the real project is shown
+    assert all("scoutbot" not in l for l in seen["lines"])  # bot section not shown without -b
+
+
+def test_run_tui_only_bots_without_flag_returns_1(tmp_path, ccrider_db):
+    # When every project is a bot and -b is off, there is nothing to show: return 1 with a hint,
+    # rather than opening an empty picker.
+    add_session(ccrider_db, "b1", "/Users/x/Code/scoutbot", "2026-07-09 00:00:00", message_count=2)
+    add_message(ccrider_db, "b1", "user", "score idea", sequence=1)
+    opened = []
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none", bot_names={"scoutbot"}), str(ccrider_db), str(tmp_path / "r.db"),
+        show_bots=False,
+        picker=lambda lines: opened.append(lines),
+        resumer=lambda *a: None,
+    )
+    assert rc == 1
+    assert opened == []  # picker never opened on an empty view
 
 
 def test_run_tui_missing_fzf_returns_1(tmp_path, ccrider_db, monkeypatch):

@@ -59,13 +59,13 @@ def run_tui(config, db_path, cache_path, show_bots=False, *, picker=None, resume
 
     sessions = load_sessions(db_path)
     real, bots = build_journal(sessions, config)
-
-    # Check if there are any projects at all (including hidden ones)
-    if not real and not bots:
-        print("No projects found.", file=sys.stderr)
-        return 1
-
     shown = real + (bots if show_bots else [])
+    if not shown:
+        if bots:  # bots exist but are hidden without --bots
+            print("No projects to show. Use -b to include automated-runs projects.", file=sys.stderr)
+        else:
+            print("No projects found.", file=sys.stderr)
+        return 1
 
     cache = RecapCache(cache_path)
     try:
