@@ -20,7 +20,11 @@ async function loadSettings() {
   }
   const authRadio = document.querySelector(`input[name="auth"][value="${data.config.recap_auth_mode}"]`);
   if (authRadio) authRadio.checked = true;
-  document.getElementById("apiKey").value = data.config.api_key || "";
+  // The server never sends the stored key back; show whether one is saved and leave the
+  // field blank. A blank field on save means "keep the existing key".
+  const apiKeyInput = document.getElementById("apiKey");
+  apiKeyInput.value = "";
+  apiKeyInput.placeholder = data.config.api_key_set ? "•••••• saved — leave blank to keep" : "sk-...";
   document.getElementById("hiddenPathSubstrings").value = data.config.hidden_path_substrings.join("\n");
   document.getElementById("terminalApp").value = data.config.terminal_app;
   document.getElementById("claudeExtraArgs").value = data.config.claude_extra_args || "";

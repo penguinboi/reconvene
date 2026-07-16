@@ -152,6 +152,58 @@ def test_settings_get_lists_projects_and_config(running_server):
     assert data["config"]["hidden_path_substrings"] == []
 
 
+def test_settings_get_never_returns_the_api_key(tmp_path, ccrider_db):
+    # The secret must never be echoed to the browser -- only whether one is set. This removes
+    # the value from any response an attacker could read (e.g. via a DNS-rebinding fetch).
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config(recap_auth_mode="api_key", api_key="sk-secret-should-not-leak")
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
+                   lambda s, c, u: None, recap_runner=fake_recap_runner, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        with urllib.request.urlopen(f"{base_url}/api/settings") as resp:
+            raw = resp.read()
+        assert b"sk-secret-should-not-leak" not in raw
+        data = json.loads(raw)
+        assert data["config"]["api_key"] is None
+        assert data["config"]["api_key_set"] is True
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_settings_post_keeps_existing_api_key_when_field_blank(tmp_path, ccrider_db):
+    # Because the GET no longer returns the key, a save with a blank api_key field must NOT
+    # wipe the stored key -- blank means "leave it as-is".
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config(recap_auth_mode="api_key", api_key="sk-already-saved")
+    config_path = str(tmp_path / "config.json")
+    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), config_path, lambda s, c, u: None,
+                   recap_runner=fake_recap_runner, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        payload = json.dumps({
+            "bot_names": [], "hidden_names": [],
+            "recap_auth_mode": "api_key", "api_key": None,
+        }).encode()
+        req = urllib.request.Request(f"{base_url}/api/settings", method="POST", data=payload,
+                                      headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req):
+            pass
+        assert config.api_key == "sk-already-saved"  # unchanged, not wiped
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_settings_post_saves_overrides(tmp_path, ccrider_db):
     add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)

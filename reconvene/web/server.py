@@ -14,6 +14,15 @@ from ..recap import RecapCache, ensure_recaps, excerpt, first_user_message
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
+def _redacted_config(config):
+    # Never send the API key to the browser -- only whether one is set. Callers that persist
+    # the config still use config.to_dict() directly, which keeps the real value.
+    cfg = config.to_dict()
+    cfg["api_key_set"] = bool(cfg.get("api_key"))
+    cfg["api_key"] = None
+    return cfg
+
+
 def _project_summary(p, db_path):
     return {
         "name": p.name,
@@ -92,7 +101,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 real, bots = build_journal(sessions, config)
                 self._send_json(200, {
                     "projects": [_project_summary(p, db_path) for p in real + bots],
-                    "config": config.to_dict(),
+                    "config": _redacted_config(config),
                 })
                 return
             rel_path = "index.html" if path == "/" else path.lstrip("/")
@@ -126,11 +135,15 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 config.hidden_names = set(data.get("hidden_names", []))
                 config.hidden_path_substrings = set(data.get("hidden_path_substrings", []))
                 config.recap_auth_mode = data.get("recap_auth_mode", config.recap_auth_mode)
-                config.api_key = data.get("api_key", config.api_key)
+                # A blank/absent api_key means "keep the existing one" -- the GET never returns
+                # the stored key, so an unchanged form must not wipe it.
+                new_key = data.get("api_key")
+                if new_key:
+                    config.api_key = new_key
                 config.terminal_app = data.get("terminal_app", config.terminal_app)
                 config.claude_extra_args = data.get("claude_extra_args", config.claude_extra_args)
                 save_config(config, config_path)
-                self._send_json(200, {"status": "saved", "config": config.to_dict()})
+                self._send_json(200, {"status": "saved", "config": _redacted_config(config)})
                 return
             self.send_response(404)
             self.end_headers()
