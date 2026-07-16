@@ -8,7 +8,7 @@ from urllib.parse import unquote, urlparse
 
 from ..config import save_config
 from ..db import load_sessions
-from ..journal import abbreviate_home, build_journal, recency_bucket, relative_time
+from ..journal import abbreviate_home, build_journal, build_settings_projects, recency_bucket, relative_time
 from ..recap import RecapCache, ensure_recaps, excerpt, first_user_message
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -26,7 +26,9 @@ def _redacted_config(config):
 def _project_summary(p, db_path):
     return {
         "name": p.name,
-        "category": p.category,
+        # The client's classification vocabulary is real/bot/drop; a user-hidden project is
+        # surfaced as "drop" so its "Hidden" option is pre-selected and it can be toggled back.
+        "category": "drop" if p.category == "hidden" else p.category,
         "count": p.count,
         "last_active": p.last_active,
         "recency": recency_bucket(p.last_active),
@@ -125,9 +127,9 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 return
             if path == "/api/settings":
                 sessions = load_sessions(db_path)
-                real, bots = build_journal(sessions, config)
+                projects = build_settings_projects(sessions, config)
                 self._send_json(200, {
-                    "projects": [_project_summary(p, db_path) for p in real + bots],
+                    "projects": [_project_summary(p, db_path) for p in projects],
                     "config": _redacted_config(config),
                 })
                 return

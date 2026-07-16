@@ -26,7 +26,9 @@ def classify_category(project_path: str, config, message_count: int | None = Non
             return "drop"
     name = canonical_name(project_path)
     if name in config.hidden_names:
-        return "drop"
+        # Distinct from "drop": the user explicitly hid this by name, so the settings UI surfaces
+        # it (as a "Hidden" row) to allow un-hiding. Noise-dropped projects stay fully hidden.
+        return "hidden"
     if name in config.bot_names:
         if message_count is not None and message_count > BOT_PROMOTE_MESSAGE_COUNT:
             return "real"

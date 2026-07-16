@@ -40,8 +40,10 @@ def test_classify_bot_names_override():
 
 
 def test_classify_hidden_names_override():
+    # User-hidden-by-name is a distinct "hidden" category (not "drop"), so the settings UI can
+    # surface it for un-hiding while noise-dropped projects stay out of sight.
     config = Config(hidden_names={"scratch-repo"})
-    assert classify_category("/Users/x/Code/scratch-repo", config, message_count=10) == "drop"
+    assert classify_category("/Users/x/Code/scratch-repo", config, message_count=10) == "hidden"
 
 
 def test_classify_hidden_path_substrings_drops_matching_paths():

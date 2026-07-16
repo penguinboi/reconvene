@@ -92,7 +92,9 @@ def abbreviate_home(path: str, home: str | None = None) -> str:
     return path
 
 
-def build_journal(sessions, config):
+def _group_projects(sessions, config):
+    # Group sessions into Projects keyed by (category, canonical name). Noise-dropped sessions are
+    # excluded; user-hidden ("hidden") ones are kept so the settings view can surface them.
     groups: dict[tuple[str, str], list[Session]] = {}
     for s in sessions:
         cat = classify_category(s.project_path, config, s.message_count)
@@ -103,8 +105,21 @@ def build_journal(sessions, config):
     for (cat, name), sess in groups.items():
         sess.sort(key=lambda s: s.updated_at, reverse=True)
         projects.append(Project(name=name, category=cat, sessions=sess))
-    real = sorted((p for p in projects if p.category == "real"),
+    return projects
+
+
+def _by_recency(projects, category):
+    return sorted((p for p in projects if p.category == category),
                   key=lambda p: p.last_active, reverse=True)
-    bots = sorted((p for p in projects if p.category == "bot"),
-                  key=lambda p: p.last_active, reverse=True)
-    return real, bots
+
+
+def build_journal(sessions, config):
+    projects = _group_projects(sessions, config)
+    return _by_recency(projects, "real"), _by_recency(projects, "bot")
+
+
+def build_settings_projects(sessions, config):
+    # Real + bot + user-hidden projects, for the settings table -- so a hidden project stays visible
+    # there (as a "Hidden" row) and can be toggled back. Noise-dropped projects remain excluded.
+    projects = _group_projects(sessions, config)
+    return _by_recency(projects, "real") + _by_recency(projects, "bot") + _by_recency(projects, "hidden")

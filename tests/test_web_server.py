@@ -173,6 +173,37 @@ def test_settings_get_lists_projects_and_config(running_server):
     assert data["config"]["hidden_path_substrings"] == []
 
 
+def test_settings_get_includes_hidden_projects_so_they_can_be_unhidden(tmp_path, ccrider_db):
+    # A project the user hid must still appear in the settings table (as a "Hidden"/"drop" row),
+    # otherwise there is no UI to un-hide it -- and a later save would silently drop it from
+    # hidden_names entirely. It must NOT appear on the journal, though.
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "visible", sequence=1)
+    add_session(ccrider_db, "h1", "/Users/x/Code/secretproj", "2026-07-09 00:00:00", message_count=12)
+    add_message(ccrider_db, "h1", "user", "hidden work", sequence=1)
+    config = Config(hidden_names={"secretproj"})
+    fake_recap_runner = lambda prompt: "ONELINE: t\nDETAIL: t"
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
+                   lambda s, c, u: None, recap_runner=fake_recap_runner, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        base_url = f"http://127.0.0.1:{server.server_port}"
+        with urllib.request.urlopen(f"{base_url}/api/settings") as resp:
+            settings = json.loads(resp.read())
+        with urllib.request.urlopen(f"{base_url}/api/journal") as resp:
+            journal = json.loads(resp.read())
+        settings_names = {p["name"] for p in settings["projects"]}
+        assert "secretproj" in settings_names   # shown in settings, so it can be un-hidden
+        hidden = next(p for p in settings["projects"] if p["name"] == "secretproj")
+        assert hidden["category"] == "drop"     # surfaced with the "Hidden" option's value
+        journal_names = {p["name"] for p in journal["real"] + journal["bots"]}
+        assert "secretproj" not in journal_names  # still hidden from the journal
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_settings_get_never_returns_the_api_key(tmp_path, ccrider_db):
     # The secret must never be echoed to the browser -- only whether one is set. This removes
     # the value from any response an attacker could read (e.g. via a DNS-rebinding fetch).

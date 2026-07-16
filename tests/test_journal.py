@@ -4,7 +4,14 @@ from datetime import datetime, timezone
 
 from reconvene.config import Config
 from reconvene.db import Session
-from reconvene.journal import abbreviate_home, build_journal, recency_bucket, relative_time, verbose_age
+from reconvene.journal import (
+    abbreviate_home,
+    build_journal,
+    build_settings_projects,
+    recency_bucket,
+    relative_time,
+    verbose_age,
+)
 
 
 def S(sid, path, updated, message_count=10):
@@ -40,6 +47,40 @@ def test_build_journal_promotes_long_bot_sessions_and_drops_noise():
     assert "sideproject" in real_names
     sideproject = next(p for p in real if p.name == "sideproject")
     assert sideproject.count == 1 and sideproject.latest.session_id == "i"  # noisy session dropped
+
+
+def test_build_journal_excludes_user_hidden_projects():
+    # A project the user hid by name must not appear on the journal (real or bot).
+    config = Config(hidden_names={"secretproj"})
+    sessions = [
+        S("a", "/Users/x/Code/myproject", "2026-07-08 00:00:00"),
+        S("b", "/Users/x/Code/secretproj", "2026-07-09 00:00:00"),
+    ]
+    real, bots = build_journal(sessions, config)
+    names = {p.name for p in real} | {p.name for p in bots}
+    assert names == {"myproject"}  # secretproj hidden from the journal
+
+
+def test_build_settings_projects_includes_user_hidden_but_not_noise():
+    # The settings view surfaces real + bot + user-hidden projects (so hidden ones can be toggled
+    # back), but still excludes noise-dropped ones (scratchpad, <=2-message pings).
+    config = Config(bot_names={"scoutbot"}, hidden_names={"secretproj"})
+    sessions = [
+        S("a", "/Users/x/Code/myproject", "2026-07-08 00:00:00"),
+        S("b", "/Users/x/Code/secretproj", "2026-07-09 00:00:00"),      # user-hidden
+        S("c", "/Users/x/Code/scoutbot", "2026-07-09 00:00:00", message_count=100),  # bot->real (promoted)
+        S("d", "/private/tmp/x/scratchpad", "2026-07-10 00:00:00"),     # noise drop
+        S("e", "/Users/x/Code/pingbot", "2026-07-10 00:00:00", message_count=1),  # noise drop
+    ]
+    projects = build_settings_projects(sessions, config)
+    names = {p.name for p in projects}
+    assert "myproject" in names
+    assert "secretproj" in names   # user-hidden IS shown here (so it can be un-hidden)
+    assert "scoutbot" in names
+    assert "scratchpad" not in names  # noise stays out
+    assert "pingbot" not in names     # noise stays out
+    hidden = next(p for p in projects if p.name == "secretproj")
+    assert hidden.category == "hidden"
 
 
 def test_recency_bucket_active_within_24_hours():
