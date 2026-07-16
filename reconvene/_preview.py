@@ -15,16 +15,25 @@ def _find_project(config, db_path, session_id):
     return next((p for p in real + bots if p.latest.session_id == session_id), None)
 
 
-def _recap_body(project, db_path, cache_path, config, recaps_fn):
+def _print_recap(project, db_path, cache_path, config, recaps_fn):
+    # Cache-first. On a miss, generate inline (blocking just this one preview) and print the recap.
+    # No streamed "generating…" placeholder: fzf's preview pane appends stdout as it arrives and does
+    # not honor in-place line-clears (\r, \033[2K), so any placeholder would linger above the finished
+    # recap. The header — already flushed by the caller — stays visible during generation, so the pane
+    # is never blank; it just fills in below once the recap is ready.
     cache = RecapCache(cache_path)
     try:
         sig = signature(project.sessions[:RECENT_SESSIONS_FOR_RECAP])
         hit = cache.get(project.name, sig)
         if hit is not None:
-            return hit[1]
-        print("⏳ generating recap…", flush=True)
-        result = recaps_fn([project], db_path, cache, config)
-        return result.get(project.name, ("", "(no recap)"))[1]
+            print(hit[1])
+            return
+        try:
+            result = recaps_fn([project], db_path, cache, config)
+            body = result.get(project.name, ("", "(no recap)"))[1]
+        except Exception as e:
+            body = f"⚠ recap unavailable: {e}"
+        print(body)
     finally:
         cache.close()
 
@@ -44,10 +53,9 @@ def main(argv, *, recaps_fn=ensure_recaps) -> int:
     print(render_header(project), flush=True)
     print()  # blank line between header and body
     try:
-        body = _recap_body(project, db_path, cache_path, config, recaps_fn)
+        _print_recap(project, db_path, cache_path, config, recaps_fn)
     except Exception as e:
-        body = f"⚠ recap unavailable: {e}"
-    print(body)
+        print(f"⚠ recap unavailable: {e}")
     return 0
 
 

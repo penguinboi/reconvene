@@ -47,7 +47,7 @@ def test_preview_cache_hit_prints_cached_recap_without_generating(tmp_path, ccri
     assert called == []       # generation never invoked on a hit
 
 
-def test_preview_cache_miss_shows_loading_then_derived_recap(tmp_path, ccrider_db):
+def test_preview_cache_miss_generates_and_prints_recap(tmp_path, ccrider_db):
     add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "s1", "user", "wire up the thresholds", sequence=1)
     buf = io.StringIO()
@@ -55,8 +55,11 @@ def test_preview_cache_miss_shows_loading_then_derived_recap(tmp_path, ccrider_d
         _preview.main(["s1", str(ccrider_db), str(tmp_path / "r.db"), _none_config(tmp_path)])  # real ensure_recaps, none -> derive
     out = buf.getvalue()
     assert "myproject" in out                # header
-    assert "⏳ generating recap…" in out      # loading marker on a miss
     assert "wire up the thresholds" in out   # derived recap = first user message
+    # No streamed placeholder or terminal escapes: fzf's preview pane can't clear them, so we never
+    # print a spinner that would linger above the recap.
+    assert "⏳" not in out
+    assert "\033[" not in out
 
 
 def test_preview_generation_failure_is_graceful(tmp_path, ccrider_db):
