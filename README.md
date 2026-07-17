@@ -4,6 +4,11 @@ Resume your Claude Code sessions from a browser tab. Reads
 [ccrider](https://github.com/neilberkman/ccrider)'s session database, ranks your
 projects by recent activity, and lets you pick up where you left off.
 
+![The Reconvene journal — projects ranked by recent activity, each with a generated recap](assets/web-journal.png)
+
+Each project shows an AI-generated recap of your recent sessions, so you can tell at a
+glance what you were doing before you pick one to resume.
+
 ## Requires
 
 - [ccrider](https://github.com/neilberkman/ccrider): `brew install neilberkman/tap/ccrider`
@@ -37,6 +42,15 @@ reconvene -b           # TUI: also list automated-runs (bot) projects
 Running `reconvene` in a terminal prompts you to choose the **Web view** (opens your browser to
 the project journal) or the **TUI** (an fzf picker in the terminal that hands off to
 `claude --resume` when you select a session). Non-interactive invocations run the web view.
+
+Pick a project in the web view and Reconvene shows the full recap before resuming:
+
+![Resuming a project — the full recap and a Resume button](assets/web-resume.png)
+
+Prefer the terminal? The TUI is an fzf picker with the same recaps in a live preview pane,
+generated on demand for whichever project you highlight:
+
+![The Reconvene TUI — an fzf picker with a recap preview pane](assets/tui.png)
 
 First run has zero configuration — every project is classified automatically. Visit
 Settings (linked from the main page) to override classification for a specific project,
