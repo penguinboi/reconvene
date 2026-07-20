@@ -18,8 +18,12 @@
   --error-border: #f5c6cb;
 }
 
+/* Dark palette. Applied automatically when the OS prefers dark AND no explicit theme is
+   chosen (`:root:not([data-theme])`), and applied explicitly for `data-theme="dark"`.
+   Keep the two var blocks below identical. Explicit LIGHT needs no rule: setting
+   data-theme="light" makes the media query stop matching, so the base :root (light) wins. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #0d1117;
     --card-bg: #161b22;
     --border: #30363d;
@@ -36,6 +40,24 @@
     --error-text: #ffb3ad;
     --error-border: #6e2530;
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --card-bg: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #238636;
+  --accent-hover: #2ea043;
+  --accent-glow: rgba(35, 134, 54, 0.25);
+  --link: #58a6ff;
+  --dot-active: #3fb950;
+  --dot-recent: #d29922;
+  --dot-stale: var(--text-muted);
+  --error-bg: #3d1418;
+  --error-text: #ffb3ad;
+  --error-border: #6e2530;
 }
 
 body {
@@ -92,6 +114,30 @@ a:hover {
 .topbar-logo {
   display: block;
   border-radius: 4px;
+}
+
+.topbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.theme-toggle {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.theme-toggle:hover {
+  background: none;
+  opacity: 1;
+  transform: none;
 }
 
 .topbar-home:hover {

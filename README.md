@@ -71,7 +71,8 @@ in a live preview pane, `ctrl-f` to search and `ctrl-s` to drill into a project'
 
 First run has zero configuration — every project is classified automatically. Visit
 Settings (linked from the main page) to override classification for a specific project,
-or to choose how recap generation authenticates with Claude Code.
+or to choose how recap generation authenticates with Claude Code. The top bar has a
+**light / dark / auto** theme toggle (auto follows your system, and is the default).
 
 ## Testing
 
