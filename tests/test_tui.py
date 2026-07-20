@@ -228,3 +228,59 @@ def test_run_tui_session_view_esc_returns_to_projects(tmp_path, ccrider_db):
     assert resumed == []
     # the loop must re-show the project list after the session-view esc, not exit early
     assert len(project_pick_calls) == 2
+
+
+def test_run_tui_ctrl_f_search_resumes_hit(tmp_path, ccrider_db):
+    add_session(ccrider_db, "hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", message_count=30)
+    add_message(ccrider_db, "hit", "user", "tune the synology nas", sequence=1)
+    add_session(ccrider_db, "other", "/Users/x/Code/webapp", "2026-07-08 00:00:00", message_count=30)
+    add_message(ccrider_db, "other", "user", "css fixes", sequence=1)
+    resumed = []
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=lambda lines: ("ctrl-f", None),
+        search_picker=lambda query: "hit\thomelab · 12d ago · 1✓ · …",
+        resumer=lambda sid, cwd, updated_at, config: resumed.append((sid, cwd)),
+    )
+    assert rc == 0
+    assert resumed == [("hit", "/Users/x/Code/homelab")]
+
+
+def test_run_tui_search_esc_returns_to_projects(tmp_path, ccrider_db):
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "hi", sequence=1)
+    picks = iter([("ctrl-f", None), ("", None)])
+    resumed = []
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=lambda lines: next(picks),
+        search_picker=lambda query: None,   # esc in search view
+        resumer=lambda *a: resumed.append(a),
+    )
+    assert rc == 0
+    assert resumed == []
+
+
+def test_run_tui_initial_search_skips_project_view(tmp_path, ccrider_db):
+    add_session(ccrider_db, "hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", message_count=30)
+    add_message(ccrider_db, "hit", "user", "pihole", sequence=1)
+    resumed = []
+    queries = []
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=lambda lines: (_ for _ in ()).throw(AssertionError("project picker must not run")),
+        search_picker=lambda query: queries.append(query) or "hit\thomelab · 12d ago · 1✓ · …",
+        resumer=lambda sid, cwd, updated_at, config: resumed.append(sid),
+        initial_search="pihole",
+    )
+    assert rc == 0
+    assert queries == ["pihole"]
+    assert resumed == ["hit"]
+
+
+def test_search_reload_command_shape():
+    cmd = tui._search_reload_command("/db/sessions.db")
+    assert "-m reconvene._search" in cmd
+    assert "{q}" in cmd
+    assert "/db/sessions.db" in cmd
+    assert "PYTHONPATH=" in cmd

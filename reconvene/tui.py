@@ -1,5 +1,6 @@
 # ABOUTME: Terminal frontend — an fzf picker over the ranked journal that hands off to claude --resume.
 # ABOUTME: Recaps load lazily per highlighted item via an fzf --preview command (reconvene._preview).
+import os
 import shlex
 import shutil
 import subprocess
@@ -80,14 +81,51 @@ def _make_fzf_picker(preview_cmd, expect=()):
     return picker
 
 
+def _search_reload_command(db_path) -> str:
+    # fzf substitutes {q} with the current query and re-runs this on every keystroke
+    # (change:reload). FTS answers in ~10ms, so live search is cheap.
+    pkg_root = str(Path(__file__).resolve().parent.parent)
+    return (
+        f"PYTHONPATH={shlex.quote(pkg_root)} {shlex.quote(sys.executable)} "
+        f"-m reconvene._search {{q}} {shlex.quote(db_path)}"
+    )
+
+
+def _make_fzf_search_picker(db_path, cache_path, config_path):
+    # --disabled turns off fzf's own filtering: the line set IS the result set, reloaded from
+    # FTS on each keystroke. Returns the chosen line or None (esc).
+    preview_cmd = _preview_command(db_path, cache_path, config_path, session=True)
+    reload_cmd = _search_reload_command(db_path)
+
+    def search_picker(query):
+        initial = subprocess.run(
+            [sys.executable, "-m", "reconvene._search", query, db_path],
+            capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+        ).stdout
+        proc = subprocess.run(
+            ["fzf", "--disabled", "--query", query, "--no-sort", "--layout=reverse",
+             "--border=rounded", "--info=inline", "--prompt", "search> ",
+             "--delimiter", "\t", "--with-nth", "2..",
+             "--bind", f"change:reload:{reload_cmd}",
+             "--preview", preview_cmd,
+             "--preview-window", "right:65%:wrap"],
+            input=initial, capture_output=True, text=True,
+        )
+        return proc.stdout.strip() or None
+    return search_picker
+
+
 def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
-            picker=None, session_picker=None, resumer=exec_resume) -> int:
+            picker=None, session_picker=None, search_picker=None,
+            resumer=exec_resume, initial_search=None) -> int:
     if picker is None and shutil.which("fzf") is None:
         print("reconvene: the terminal picker needs fzf — install it with: brew install fzf",
               file=sys.stderr)
         return 1
 
     sessions = load_sessions(db_path)
+    all_by_sid = {s.session_id: s for s in sessions}
     real, bots = build_journal(sessions, config)
     shown = real + (bots if show_bots else [])
     if not shown:
@@ -101,12 +139,36 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
     sid_to_project = {p.latest.session_id: p for p in shown}
     lines = [f"{sid}\t{display}" for display, sid in entries]
     project_picker = picker or _make_fzf_picker(
-        _preview_command(db_path, cache_path, config_path), expect=("ctrl-s",))
+        _preview_command(db_path, cache_path, config_path), expect=("ctrl-s", "ctrl-f"))
     active_session_picker = session_picker or _make_fzf_picker(
         _preview_command(db_path, cache_path, config_path, session=True))
+    active_search_picker = search_picker or _make_fzf_search_picker(db_path, cache_path, config_path)
+
+    def _run_search(query) -> int | None:
+        # Returns 0 if a session was resumed, None to fall back to the project view.
+        s_chosen = active_search_picker(query)
+        if not s_chosen:
+            return None
+        sid = s_chosen.split("\t", 1)[0]
+        session = all_by_sid.get(sid)
+        if session is None:
+            return None
+        resumer(session.session_id, session.project_path, session.updated_at, config)
+        return 0
+
+    if initial_search is not None:
+        result = _run_search(initial_search)
+        if result is not None:
+            return result
+        # esc from an initial search falls through to the project view
 
     while True:
         key, chosen = project_picker(lines)
+        if key == "ctrl-f":
+            result = _run_search("")
+            if result is not None:
+                return result
+            continue
         if not chosen and key != "ctrl-s":
             return 0
         project = sid_to_project.get(chosen.split("\t", 1)[0]) if chosen else None

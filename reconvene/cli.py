@@ -70,11 +70,16 @@ def main(argv=None, *, input_fn=input, stdin_isatty=None,
     ap.add_argument("--db", default=str(CCRIDER_DB), help="ccrider sessions DB path")
     ap.add_argument("--cache", default=str(RECAP_CACHE_DB), help="recap cache path")
     ap.add_argument("--config", default=str(CONFIG_PATH), help="config file path")
+    ap.add_argument("-s", "--search", nargs="?", const="", default=None, metavar="QUERY",
+                    help="open the TUI directly in search mode (optional initial query)")
     ap.add_argument("-V", "--version", action="version", version=f"reconvene {VERSION}")
     args = ap.parse_args(argv)
 
     interactive = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
-    mode = _choose_frontend(input_fn) if interactive else "web"
+    if args.search is not None:
+        mode = "tui"
+    else:
+        mode = _choose_frontend(input_fn) if interactive else "web"
     if mode is None:
         return 0  # user cancelled the chooser
 
@@ -93,5 +98,6 @@ def main(argv=None, *, input_fn=input, stdin_isatty=None,
 
     config = load_config(args.config)
     if mode == "tui":
-        return (launch_tui or run_tui)(config, args.db, args.cache, args.config, args.bots)
+        return (launch_tui or run_tui)(config, args.db, args.cache, args.config, args.bots,
+                                        initial_search=args.search)
     return (launch_web or _serve_web)(config, args.db, args.cache, args.config)

@@ -5,7 +5,7 @@ import socket
 import pytest
 
 from reconvene import cli
-from reconvene.cli import find_free_port
+from reconvene.cli import find_free_port, main
 
 
 def test_find_free_port_returns_preferred_when_available():
@@ -129,6 +129,18 @@ def test_main_tui_passes_bots_flag(tmp_path):
         ["-b", "--no-sync", "--db", str(tmp_path / "x.db"), "--config", str(tmp_path / "c.json")],
         stdin_isatty=True, input_fn=lambda prompt: "2",
         launch_web=lambda *a, **k: 0,
-        launch_tui=lambda config, db, cache, config_path, show_bots: captured.setdefault("show_bots", show_bots) or 0,
+        launch_tui=lambda config, db, cache, config_path, show_bots, initial_search=None: captured.setdefault("show_bots", show_bots) or 0,
     )
     assert captured["show_bots"] is True
+
+
+def test_main_search_flag_launches_tui_in_search_mode(tmp_path):
+    calls = {}
+    def fake_tui(config, db, cache, config_path, bots, initial_search=None):
+        calls["initial_search"] = initial_search
+        return 0
+    rc = main(["--no-sync", "--db", str(tmp_path / "x.db"), "--cache", str(tmp_path / "r.db"),
+               "--config", str(tmp_path / "c.json"), "-s", "pihole"],
+              stdin_isatty=True, input_fn=lambda _: "2", launch_tui=fake_tui)
+    assert rc == 0
+    assert calls["initial_search"] == "pihole"
