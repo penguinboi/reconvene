@@ -253,3 +253,20 @@ table td, table th {
 @media (prefers-reduced-motion: reduce) {
   .project:hover, button:hover { transform: none; }
 }
+
+/* Search */
+#searchBox {
+  flex: 1;
+  max-width: 340px;
+  margin: 0 16px;
+  padding: 6px 10px;
+  font: inherit;
+  color: inherit;
+  background: var(--card-bg);
+  border: 1px solid var(--border, #30363d);
+  border-radius: 6px;
+}
+.search-hit .meta strong {
+  font-weight: 700;
+  text-decoration: underline;
+}

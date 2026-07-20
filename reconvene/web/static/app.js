@@ -92,4 +92,88 @@ document.getElementById("modalConfirm").addEventListener("click", () => {
 
 document.getElementById("modalCancel").addEventListener("click", hideConfirmModal);
 
+// --- search -----------------------------------------------------------------
+const searchBox = document.getElementById("searchBox");
+let searchTimer = null;
+
+searchBox.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runSearch, 250);
+});
+searchBox.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    searchBox.value = "";
+    runSearch();
+  }
+});
+
+async function runSearch() {
+  const q = searchBox.value.trim();
+  if (!q) {
+    loadJournal();
+    return;
+  }
+  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) {
+    const data = await res.json();
+    showError(`Search failed: ${data.error}`);
+    return;
+  }
+  const data = await res.json();
+  renderResults(data.results, q);
+}
+
+function snippetNode(snippet) {
+  // «…» regions become <strong>. Built via textContent — snippet text is untrusted.
+  const span = document.createElement("span");
+  const parts = snippet.split("«");
+  span.appendChild(document.createTextNode(parts[0]));
+  for (const part of parts.slice(1)) {
+    const close = part.indexOf("»");
+    const strong = document.createElement("strong");
+    strong.textContent = close === -1 ? part : part.slice(0, close);
+    span.appendChild(strong);
+    if (close !== -1) span.appendChild(document.createTextNode(part.slice(close + 1)));
+  }
+  return span;
+}
+
+function renderResults(results, q) {
+  const el = document.getElementById("journal");
+  el.innerHTML = "";
+  el.classList.remove("placeholder");
+  if (results.length === 0) {
+    el.classList.add("placeholder");
+    el.textContent = `No sessions matching “${q}”.`;
+    return;
+  }
+  for (const r of results) {
+    const div = document.createElement("div");
+    div.className = "project search-hit";
+    const nameEl = document.createElement("strong");
+    nameEl.textContent = r.project;
+    const metaLine = document.createElement("div");
+    metaLine.className = "meta-line";
+    metaLine.textContent =
+      `${r.relative} · ${r.message_count} msgs · ${r.hits} match${r.hits === 1 ? "" : "es"} · ${r.cwd}`;
+    const snip = document.createElement("div");
+    snip.className = "meta";
+    snip.appendChild(snippetNode(r.snippet));
+    div.append(nameEl, metaLine, snip);
+    div.addEventListener("click", () => showSessionModal(r));
+    el.appendChild(div);
+  }
+}
+
+function showSessionModal(hit) {
+  document.getElementById("modalProjectName").textContent = hit.project;
+  const recapEl = document.getElementById("modalFullRecap");
+  recapEl.innerHTML = "";
+  recapEl.appendChild(snippetNode(hit.snippet));
+  const modal = document.getElementById("confirmModal");
+  modal.dataset.sessionId = hit.session_id;
+  modal.dataset.projectName = hit.project;
+  modal.classList.remove("hidden");
+}
+
 loadJournal();
