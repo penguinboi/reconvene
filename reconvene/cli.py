@@ -29,7 +29,7 @@ def find_free_port(preferred=4242, tries=10) -> int:
 
 
 def _choose_frontend(input_fn=input) -> str | None:
-    print("Reconvene")
+    print("Reconvene — a Penguinboi Software tool")
     print("  [1] Web view")
     print("  [2] TUI")
     while True:

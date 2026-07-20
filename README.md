@@ -91,3 +91,7 @@ E2E tests (`tests/e2e/`) drive a real browser against a real running server inst
 spawned during tests.
 
 See `THIRD_PARTY_LICENSES.md` for third-party software this project depends on.
+
+---
+
+🐧 A [Penguinboi Software](https://penguinboisoftware.com) tool. Made with ❤️ and 🧠.

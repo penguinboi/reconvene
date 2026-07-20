@@ -306,3 +306,21 @@ def test_search_result_modal_shows_session_recap(page, e2e_server, ccrider_db):
     page.locator(".search-hit").first.click()
     # The fake recap runner returns "full recap text" as the DETAIL body.
     page.get_by_text("full recap text").wait_for()
+
+
+def test_page_has_penguinboi_brand(page, e2e_server, ccrider_db):
+    base_url, _, _, _ = e2e_server
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "hi", sequence=1)
+    page.goto(base_url)
+    # Topbar penguin logo
+    logo = page.locator("img.topbar-logo")
+    assert logo.count() == 1
+    assert "favicon" in logo.get_attribute("src")
+    # Footer attribution linking to penguinboisoftware.com
+    footer_link = page.locator(".site-footer a[href='https://penguinboisoftware.com']")
+    assert footer_link.count() == 1
+    assert "Penguinboi Software" in footer_link.inner_text()
+    # Favicon is actually served
+    resp = page.request.get(f"{base_url}/favicon.png")
+    assert resp.status == 200

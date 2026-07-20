@@ -160,3 +160,8 @@ def test_main_organize_flag_runs_and_exits(tmp_path, capsys, monkeypatch, ccride
               stdin_isatty=True, input_fn=lambda _: "1")
     assert rc == 0
     assert "Homelab Fixes" in capsys.readouterr().out
+
+
+def test_choose_frontend_shows_penguinboi_byline(capsys):
+    cli._choose_frontend(input_fn=lambda prompt: "1")
+    assert "Penguinboi Software" in capsys.readouterr().out

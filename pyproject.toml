@@ -5,7 +5,7 @@ description = "Resume Claude Code sessions from a browser tab — a ranked per-p
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
-authors = [{ name = "Skyler Lister Aley" }]
+authors = [{ name = "Skyler Lister Aley", email = "penguinboisoftware@gmail.com" }]
 keywords = ["claude-code", "ccrider", "sessions", "resume", "cli"]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -20,6 +20,7 @@ classifiers = [
 [project.urls]
 Homepage = "https://github.com/penguinboi/reconvene"
 Repository = "https://github.com/penguinboi/reconvene"
+"Penguinboi Software" = "https://penguinboisoftware.com"
 
 [project.scripts]
 reconvene = "reconvene.cli:main"
@@ -36,7 +37,7 @@ packages = ["reconvene", "reconvene.web"]
 
 [tool.setuptools.package-data]
 # Ship the web UI assets; without this the installed server serves the API but 404s the pages.
-"reconvene.web" = ["static/*.html", "static/*.css", "static/*.js"]
+"reconvene.web" = ["static/*.html", "static/*.css", "static/*.js", "static/*.png"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

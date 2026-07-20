@@ -84,6 +84,14 @@ a:hover {
 
 .topbar-home {
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.topbar-logo {
+  display: block;
+  border-radius: 4px;
 }
 
 .topbar-home:hover {
@@ -319,3 +327,19 @@ table td, table th {
   opacity: 0.6;
   font-style: italic;
 }
+
+/* Penguinboi Software footer — quiet attribution in reconvene's own muted palette */
+.site-footer {
+  margin: 40px auto 24px;
+  padding-top: 16px;
+  max-width: 900px;
+  text-align: center;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+}
+.site-footer a {
+  color: var(--text-muted);
+  text-decoration: underline;
+}
+.site-footer a:hover { color: var(--link); }
