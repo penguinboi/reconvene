@@ -64,17 +64,32 @@ def render_session_line(session, db_path) -> str:
             f" · {session.message_count} msgs · {first}")
 
 
-def _make_fzf_picker(preview_cmd, expect=()):
+# Key-hint headers shown at the top of each fzf view so the bindings are discoverable.
+PROJECT_HEADER = "enter: resume  ·  ctrl-s: pick session  ·  ctrl-f: search  ·  esc: quit"
+SESSION_HEADER = "enter: resume  ·  esc: back"
+SEARCH_HEADER = "type to search  ·  enter: resume  ·  esc: back"
+
+
+def _fzf_command(preview_cmd, *, expect=(), header="", extra=None):
+    cmd = ["fzf", "--no-sort", "--layout=reverse", "--border=rounded", "--info=inline",
+           "--delimiter", "\t", "--with-nth", "2..",
+           "--preview", preview_cmd,
+           "--preview-window", "right:65%:wrap"]
+    if header:
+        cmd += ["--header", header, "--header-first"]
+    if expect:
+        cmd += ["--expect", ",".join(expect)]
+    if extra:
+        cmd += extra
+    return cmd
+
+
+def _make_fzf_picker(preview_cmd, expect=(), header=""):
     # Returns (key, chosen_line). key is "" for a plain enter; with --expect, fzf prints the
     # pressed key on the first output line and the highlighted line on the second. esc/abort
     # yields ("", None).
     def picker(lines):
-        cmd = ["fzf", "--no-sort", "--layout=reverse", "--border=rounded", "--info=inline",
-               "--delimiter", "\t", "--with-nth", "2..",
-               "--preview", preview_cmd,
-               "--preview-window", "right:65%:wrap"]
-        if expect:
-            cmd += ["--expect", ",".join(expect)]
+        cmd = _fzf_command(preview_cmd, expect=expect, header=header)
         proc = subprocess.run(cmd, input="\n".join(lines), capture_output=True, text=True)
         out = proc.stdout.splitlines()
         if not expect:
@@ -109,15 +124,11 @@ def _make_fzf_search_picker(db_path, cache_path, config_path):
             capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
         ).stdout
-        proc = subprocess.run(
-            ["fzf", "--disabled", "--query", query, "--no-sort", "--layout=reverse",
-             "--border=rounded", "--info=inline", "--prompt", "search> ",
-             "--delimiter", "\t", "--with-nth", "2..",
-             "--bind", f"change:reload:{reload_cmd}",
-             "--preview", preview_cmd,
-             "--preview-window", "right:65%:wrap"],
-            input=initial, capture_output=True, text=True,
-        )
+        cmd = _fzf_command(preview_cmd, header=SEARCH_HEADER, extra=[
+            "--disabled", "--query", query, "--prompt", "search> ",
+            "--bind", f"change:reload:{reload_cmd}",
+        ])
+        proc = subprocess.run(cmd, input=initial, capture_output=True, text=True)
         return proc.stdout.strip() or None
     return search_picker
 
@@ -145,9 +156,10 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
     sid_to_project = {p.latest.session_id: p for p in shown}
     lines = [f"{sid}\t{display}" for display, sid in entries]
     project_picker = picker or _make_fzf_picker(
-        _preview_command(db_path, cache_path, config_path), expect=("ctrl-s", "ctrl-f"))
+        _preview_command(db_path, cache_path, config_path),
+        expect=("ctrl-s", "ctrl-f"), header=PROJECT_HEADER)
     active_session_picker = session_picker or _make_fzf_picker(
-        _preview_command(db_path, cache_path, config_path, session=True))
+        _preview_command(db_path, cache_path, config_path, session=True), header=SESSION_HEADER)
     active_search_picker = search_picker or _make_fzf_search_picker(db_path, cache_path, config_path)
 
     def _run_search(query) -> int | None:

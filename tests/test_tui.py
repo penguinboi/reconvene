@@ -335,3 +335,24 @@ def test_run_tui_enter_on_single_session_loose_group_resumes_directly(tmp_path, 
     assert rc == 0
     assert resumed == ["solo"]              # resumed directly
     assert session_picker_calls == []       # picker never opened for a 1-session group
+
+
+def test_fzf_command_includes_header_and_preview():
+    cmd = tui._fzf_command("PREVIEWCMD", expect=("ctrl-s",), header="my hints")
+    assert "--header" in cmd
+    assert "my hints" in cmd
+    assert cmd[cmd.index("--header") + 1] == "my hints"
+    assert "--header-first" in cmd
+    assert "--preview" in cmd and "PREVIEWCMD" in cmd
+    assert cmd[cmd.index("--expect") + 1] == "ctrl-s"
+
+
+def test_fzf_command_no_header_omits_flag():
+    cmd = tui._fzf_command("PREVIEWCMD")
+    assert "--header" not in cmd
+
+
+def test_key_hint_headers_name_the_bindings():
+    assert "ctrl-s" in tui.PROJECT_HEADER and "ctrl-f" in tui.PROJECT_HEADER and "enter" in tui.PROJECT_HEADER
+    assert "esc" in tui.SESSION_HEADER and "enter" in tui.SESSION_HEADER
+    assert "search" in tui.SEARCH_HEADER
