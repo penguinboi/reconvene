@@ -13,6 +13,7 @@ classifiers = [
     "Environment :: Console",
     "Environment :: Web Environment",
     "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
     "Topic :: Utilities",
 ]
 

@@ -13,7 +13,9 @@ glance what you were doing before you pick one to resume.
 
 - [ccrider](https://github.com/neilberkman/ccrider): `brew install neilberkman/tap/ccrider`
 - The `claude` CLI (Claude Code), logged in
-- macOS (the web GUI resumes by opening a new Terminal window via AppleScript)
+- macOS or Linux — the web GUI resumes by opening a new terminal window (macOS Terminal/iTerm2
+  via AppleScript; on Linux, `$TERMINAL` or a detected emulator such as gnome-terminal, konsole,
+  alacritty, kitty, or xterm). The TUI resumes in place and works anywhere.
 - [fzf](https://github.com/junegunn/fzf) — only for the terminal picker: `brew install fzf`
 
 ## Install

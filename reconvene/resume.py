@@ -1,12 +1,22 @@
 # ABOUTME: Builds the argv that hands a chosen session back to Claude Code to resume.
-# ABOUTME: open_terminal_and_resume opens a new Terminal.app or iTerm2 window (no execvp —
-# ABOUTME: the caller is a web server that must keep running to serve other requests).
+# ABOUTME: open_terminal_and_resume opens a new terminal window (macOS Terminal/iTerm2 or a Linux
+# ABOUTME: emulator) — no execvp, since the web-server caller must keep running for other requests.
 import os
+import platform
 import shlex
+import shutil
 import subprocess
 from datetime import datetime
 
 from .journal import verbose_age
+
+# terminal_app values that name macOS apps — on Linux they mean "not configured", so we autodetect.
+_MACOS_TERMINAL_NAMES = {"Terminal", "iTerm2"}
+
+# Linux terminal emulators tried in order when none is configured. x-terminal-emulator is Debian's
+# alternatives symlink to the user's default; the rest are common concretes.
+_LINUX_TERMINAL_PRIORITY = ("x-terminal-emulator", "gnome-terminal", "konsole",
+                            "alacritty", "kitty", "xterm")
 
 
 def resume_prompt(updated_at: str, now: datetime | None = None) -> str:
@@ -63,20 +73,59 @@ def _iterm2_script(shell_command: str) -> str:
     )
 
 
+def _linux_terminal_argv(binary: str, shell_command: str) -> list[str]:
+    # Run the resume command in a login shell, then `exec bash` so the window stays open after
+    # Claude exits (matching macOS Terminal, which keeps the window). gnome-terminal takes the
+    # command after `--`; kitty takes it directly; everything else uses the classic `-e`.
+    persist = f"{shell_command}; exec bash"
+    if binary == "gnome-terminal":
+        return [binary, "--", "bash", "-c", persist]
+    if binary == "kitty":
+        return [binary, "bash", "-c", persist]
+    return [binary, "-e", "bash", "-c", persist]
+
+
+def _linux_resume(shell_command: str, config, runner, which, env) -> None:
+    candidates = []
+    configured = config.terminal_app if config else ""
+    if configured and configured not in _MACOS_TERMINAL_NAMES:
+        candidates.append(configured)
+    if env.get("TERMINAL"):
+        candidates.append(env["TERMINAL"])
+    candidates.extend(_LINUX_TERMINAL_PRIORITY)
+    for binary in candidates:
+        if which(binary):
+            runner(_linux_terminal_argv(binary, shell_command), check=True)
+            return
+    raise RuntimeError(
+        "no terminal emulator found to open the session — set a terminal in Settings, export "
+        "$TERMINAL, or install one of: " + ", ".join(_LINUX_TERMINAL_PRIORITY)
+    )
+
+
 def open_terminal_and_resume(session_id: str, cwd: str, updated_at: str, config=None,
                               runner=subprocess.run, now: datetime | None = None,
-                              path_exists=os.path.isdir) -> None:
+                              path_exists=os.path.isdir, system=None,
+                              which=shutil.which, env=None) -> None:
     if not path_exists(cwd):
-        # `cd <cwd> && claude` would silently no-op if the directory is gone (osascript still
+        # `cd <cwd> && claude` would silently no-op if the directory is gone (the launcher still
         # exits 0), so the caller would falsely believe the session resumed. Fail loudly instead.
         raise FileNotFoundError(f"project directory no longer exists: {cwd}")
-    terminal_app = config.terminal_app if config else "Terminal"
     extra_args = config.claude_extra_args if config else ""
     argv = resume_command(session_id, updated_at, extra_args, now)
     command = " ".join(shlex.quote(part) for part in argv)
     shell_command = f"cd {shlex.quote(cwd)} && {command}"
-    script = _iterm2_script(shell_command) if terminal_app == "iTerm2" else _terminal_script(shell_command)
-    runner(["osascript", "-e", script], check=True)
+    system = system or platform.system()
+    if system == "Darwin":
+        terminal_app = config.terminal_app if config else "Terminal"
+        script = _iterm2_script(shell_command) if terminal_app == "iTerm2" else _terminal_script(shell_command)
+        runner(["osascript", "-e", script], check=True)
+    elif system == "Linux":
+        _linux_resume(shell_command, config, runner, which, env if env is not None else os.environ)
+    else:
+        raise RuntimeError(
+            f"opening a terminal isn't supported on {system!r} — resume from the reconvene TUI instead"
+        )
 
 
 def exec_resume(session_id: str, cwd: str, updated_at: str, config=None,
