@@ -1,6 +1,6 @@
 [project]
 name = "reconvene"
-version = "0.1.0"
+version = "0.2.0"
 description = "Resume Claude Code sessions from a browser tab — a ranked per-project journal over ccrider's session history."
 readme = "README.md"
 requires-python = ">=3.11"
