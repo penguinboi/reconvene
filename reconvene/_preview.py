@@ -7,7 +7,7 @@ from .config import load_config
 from .constants import RECENT_SESSIONS_FOR_RECAP
 from .db import load_sessions
 from .journal import abbreviate_home, build_journal, relative_time
-from .recap import RecapCache, ensure_recaps, ensure_session_recap, signature
+from .recap import SESSION_CACHE_PREFIX, RecapCache, ensure_recaps, ensure_session_recap, signature
 from .tui import render_header
 
 
@@ -51,11 +51,22 @@ def _render_session_header(session) -> str:
     ])
 
 
-def _print_session_recap(session, db_path, cache_path, config, session_recaps_fn):
-    # Cache-first per-session recap, same no-placeholder streaming contract as _print_recap: the
-    # header (flushed by the caller) stays visible while claude runs, then the recap fills in below.
+BUILDING_NOTE = "⏳ building summary — one moment (instant after the first open)"
+
+
+def _print_session(session, db_path, cache_path, config, session_recaps_fn):
+    # Header first (flushed) so it shows immediately while a recap generates. On an uncached session
+    # that will actually call claude, a one-line note warns about the first-open wait. It can't be a
+    # disappearing spinner — fzf's preview pane is append-only and can't erase it — so it's phrased as
+    # context and shown ONLY on the generating open; cached opens (and 'none' auth, which derives
+    # instantly) print the header + recap with no note.
     cache = RecapCache(cache_path)
     try:
+        cached = cache.get(SESSION_CACHE_PREFIX + session.session_id, signature([session])) is not None
+        print(_render_session_header(session), flush=True)
+        print()  # blank line between header and body
+        if not cached and config.recap_auth_mode != "none":
+            print(BUILDING_NOTE, flush=True)
         try:
             _, body = session_recaps_fn(session, db_path, cache, config)
         except Exception as e:
@@ -76,9 +87,7 @@ def main(argv, *, recaps_fn=ensure_recaps, session_recaps_fn=ensure_session_reca
             if session is None:
                 print("(session not found)")
                 return 0
-            print(_render_session_header(session), flush=True)
-            print()  # blank line between header and body
-            _print_session_recap(session, db_path, cache_path, config, session_recaps_fn)
+            _print_session(session, db_path, cache_path, config, session_recaps_fn)
             return 0
         project = _find_project(config, db_path, cache_path, session_id)
     except Exception as e:
