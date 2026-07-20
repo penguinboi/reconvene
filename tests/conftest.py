@@ -22,6 +22,12 @@ def ccrider_db(tmp_path):
           content TEXT, text_content TEXT, timestamp DATETIME,
           is_sidechain INTEGER, sequence INTEGER
         );
+        CREATE VIRTUAL TABLE messages_fts USING fts5(
+          text_content,
+          content=messages,
+          content_rowid=id,
+          tokenize='porter unicode61'
+        );
         """
     )
     conn.commit()
@@ -45,10 +51,14 @@ def add_session(db, session_id, project_path, updated_at,
 def add_message(db, session_id, role, body, sequence, is_sidechain=0):
     sender = "human" if role == "user" else role
     conn = sqlite3.connect(db)
-    conn.execute(
+    cur = conn.execute(
         "INSERT INTO messages(session_id,type,sender,content,text_content,is_sidechain,sequence)"
         " VALUES((SELECT id FROM sessions WHERE session_id=?),?,?,?,?,?,?)",
         (session_id, role, sender, body, body, is_sidechain, sequence),
+    )
+    conn.execute(
+        "INSERT INTO messages_fts(rowid, text_content) VALUES (?, ?)",
+        (cur.lastrowid, body),
     )
     conn.commit()
     conn.close()
