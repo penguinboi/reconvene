@@ -41,7 +41,7 @@ def test_run_tui_resumes_selected(tmp_path, ccrider_db):
     resumed = []
     rc = tui.run_tui(
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
-        picker=lambda lines: lines[0],  # pick the first entry ("s1\t...")
+        picker=lambda lines: ("", lines[0]),  # pick the first entry ("s1\t...")
         resumer=lambda sid, cwd, updated_at, config: resumed.append((sid, cwd, updated_at)),
     )
     assert rc == 0
@@ -54,7 +54,7 @@ def test_run_tui_no_pick_returns_0(tmp_path, ccrider_db):
     resumed = []
     rc = tui.run_tui(
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
-        picker=lambda lines: None,  # user pressed ESC
+        picker=lambda lines: ("", None),  # user pressed ESC
         resumer=lambda *a: resumed.append(a),
     )
     assert rc == 0
@@ -70,7 +70,7 @@ def test_run_tui_separator_pick_does_not_resume(tmp_path, ccrider_db):
     rc = tui.run_tui(
         Config(recap_auth_mode="none", bot_names={"scoutbot"}), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         show_bots=True,
-        picker=lambda lines: next(l for l in lines if "automated" in l.lower()),  # the separator row
+        picker=lambda lines: ("", next(l for l in lines if "automated" in l.lower())),  # the separator row
         resumer=lambda *a: resumed.append(a),
     )
     assert rc == 0
@@ -81,7 +81,7 @@ def test_run_tui_empty_returns_1(tmp_path, ccrider_db):
     resumed = []
     rc = tui.run_tui(
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
-        picker=lambda lines: lines[0] if lines else None,
+        picker=lambda lines: ("", lines[0]) if lines else ("", None),
         resumer=lambda *a: resumed.append(a),
     )
     assert rc == 1
@@ -99,7 +99,7 @@ def test_run_tui_bots_hidden_without_flag(tmp_path, ccrider_db):
     tui.run_tui(
         Config(recap_auth_mode="none", bot_names={"scoutbot"}), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         show_bots=False,
-        picker=lambda lines: seen.setdefault("lines", lines) and None,
+        picker=lambda lines: seen.setdefault("lines", lines) and ("", None),
         resumer=lambda *a: None,
     )
     assert any("realproj" in l for l in seen["lines"])      # the real project is shown
@@ -115,7 +115,7 @@ def test_run_tui_only_bots_without_flag_returns_1(tmp_path, ccrider_db):
     rc = tui.run_tui(
         Config(recap_auth_mode="none", bot_names={"scoutbot"}), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         show_bots=False,
-        picker=lambda lines: opened.append(lines),
+        picker=lambda lines: opened.append(lines) or ("", None),
         resumer=lambda *a: None,
     )
     assert rc == 1
@@ -142,6 +142,8 @@ def test_preview_command_references_the_preview_module_and_paths():
     # (including a bare bin/reconvene symlink, whose runtime sys.path insert a child won't inherit).
     pkg_root = str(_Path(tui.__file__).resolve().parent.parent)
     assert f"PYTHONPATH={pkg_root}" in cmd or f"PYTHONPATH='{pkg_root}'" in cmd
+    session_cmd = tui._preview_command("/db/x.db", "/c/r.db", "/cfg/c.json", session=True)
+    assert session_cmd.endswith(" --session")
 
 
 def test_run_tui_does_not_generate_recaps_up_front(tmp_path, ccrider_db, monkeypatch):
@@ -155,8 +157,50 @@ def test_run_tui_does_not_generate_recaps_up_front(tmp_path, ccrider_db, monkeyp
     seen = {}
     tui.run_tui(
         Config(), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
-        picker=lambda lines: seen.setdefault("lines", lines) and None,
+        picker=lambda lines: seen.setdefault("lines", lines) and ("", None),
         resumer=lambda *a: None,
     )
     assert seen["lines"]   # picker was reached with entry lines
     assert called == []    # no recap generation up front
+
+
+def test_render_session_line_format(tmp_path, ccrider_db):
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=7)
+    add_message(ccrider_db, "s1", "user", "fix the flaky test", sequence=1)
+    from reconvene.db import load_sessions
+    (session,) = load_sessions(str(ccrider_db))
+    line = tui.render_session_line(session, str(ccrider_db))
+    sid, display = line.split("\t", 1)
+    assert sid == "s1"
+    assert "7 msgs" in display and "fix the flaky test" in display
+
+
+def test_run_tui_ctrl_s_drills_into_sessions_and_resumes_picked(tmp_path, ccrider_db):
+    add_session(ccrider_db, "old", "/Users/x/Code/myproject", "2026-07-01 00:00:00", message_count=50)
+    add_message(ccrider_db, "old", "user", "the nas deep dive", sequence=1)
+    add_session(ccrider_db, "new", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "new", "user", "quick tweak", sequence=1)
+    resumed = []
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=lambda lines: ("ctrl-s", lines[0]),          # drill into the (only) project
+        session_picker=lambda lines: ("", next(l for l in lines if l.startswith("old\t"))),
+        resumer=lambda sid, cwd, updated_at, config: resumed.append((sid, cwd)),
+    )
+    assert rc == 0
+    assert resumed == [("old", "/Users/x/Code/myproject")]
+
+
+def test_run_tui_ctrl_s_esc_returns_to_projects(tmp_path, ccrider_db):
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "hi", sequence=1)
+    resumed = []
+    project_picks = iter([("ctrl-s", None), ("", None)])   # ctrl-s with no line, then quit
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=lambda lines: next(project_picks),
+        session_picker=lambda lines: ("", None),           # esc inside the session view
+        resumer=lambda *a: resumed.append(a),
+    )
+    assert rc == 0
+    assert resumed == []
