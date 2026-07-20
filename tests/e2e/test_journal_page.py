@@ -271,3 +271,38 @@ def test_organize_button_clusters_loose_sessions(page, e2e_server, ccrider_db):
     button.wait_for()
     button.click()
     page.get_by_text("Homelab Fixes").wait_for()
+
+
+def test_loose_group_requires_explicit_session_pick(page, e2e_server, ccrider_db):
+    # 3 projects under /Users/x/Code make it a root; 2 loose sessions launched from bare /Users/x/Code.
+    base_url, resumed, _, _ = e2e_server
+    for sub in ("a", "b", "c"):
+        add_session(ccrider_db, f"p{sub}", f"/Users/x/Code/{sub}", "2026-07-01 00:00:00", message_count=10)
+        add_message(ccrider_db, f"p{sub}", "user", "work", sequence=1)
+    add_session(ccrider_db, "loose_new", "/Users/x/Code", "2026-07-08 00:00:00", message_count=20)
+    add_message(ccrider_db, "loose_new", "user", "newer loose", sequence=1)
+    add_session(ccrider_db, "loose_old", "/Users/x/Code", "2026-07-02 00:00:00", message_count=30)
+    add_message(ccrider_db, "loose_old", "user", "older loose", sequence=1)
+
+    page.goto(base_url)
+    page.get_by_text("loose sessions").click()
+    resume = page.locator("#modalConfirm")
+    # Resume is disabled until the user picks a session (no arbitrary "latest").
+    assert resume.is_disabled()
+    assert page.locator(".session-row.selected").count() == 0
+    page.locator(".session-row", has_text="older loose").click()
+    assert not resume.is_disabled()
+    resume.click()
+    page.wait_for_timeout(300)
+    assert [r[0] for r in resumed] == ["loose_old"]
+
+
+def test_search_result_modal_shows_session_recap(page, e2e_server, ccrider_db):
+    base_url, _, _, _ = e2e_server
+    add_session(ccrider_db, "nas1", "/Users/x/Code/homelab", "2026-07-07 00:00:00", message_count=30)
+    add_message(ccrider_db, "nas1", "user", "tune the synology nas raid", sequence=1)
+    page.goto(base_url)
+    page.fill("#searchBox", "synology")
+    page.locator(".search-hit").first.click()
+    # The fake recap runner returns "full recap text" as the DETAIL body.
+    page.get_by_text("full recap text").wait_for()

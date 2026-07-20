@@ -11,7 +11,7 @@ from ..cluster import TopicAuthError, TopicCache, load_topic_lookup, organize, u
 from ..config import save_config
 from ..db import load_sessions
 from ..journal import abbreviate_home, build_journal, build_settings_projects, recency_bucket, relative_time
-from ..recap import RecapCache, ensure_recaps, excerpt, first_user_message
+from ..recap import RecapCache, ensure_recaps, ensure_session_recap, excerpt, first_user_message
 from ..search import search_sessions
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -140,6 +140,19 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 finally:
                     cache.close()
                 oneline, full = recaps.get(project.name, ("", "(no recap)"))
+                self._send_json(200, {"oneline": oneline, "full": full, "excerpt": excerpt(full)})
+                return
+            if path.startswith("/api/session-recap/"):
+                sid = unquote(path[len("/api/session-recap/"):])
+                session = next((s for s in load_sessions(db_path) if s.session_id == sid), None)
+                if session is None:
+                    self._send_json(404, {"error": f"no session {sid!r}"})
+                    return
+                cache = RecapCache(cache_path)
+                try:
+                    oneline, full = ensure_session_recap(session, db_path, cache, config, runner=recap_runner)
+                finally:
+                    cache.close()
                 self._send_json(200, {"oneline": oneline, "full": full, "excerpt": excerpt(full)})
                 return
             if path.startswith("/api/sessions/"):

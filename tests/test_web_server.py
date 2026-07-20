@@ -623,3 +623,20 @@ def test_topics_refresh_auth_none_is_409(running_server, ccrider_db):
     with pytest.raises(HTTPError) as exc:
         urllib.request.urlopen(req)
     assert exc.value.code == 409
+
+
+def test_api_session_recap_returns_generated_recap(running_server, ccrider_db):
+    base_url, _, _ = running_server
+    add_session(ccrider_db, "sx", "/Users/x/Code/myproject", "2026-07-09 00:00:00", message_count=8)
+    add_message(ccrider_db, "sx", "user", "the nas migration", sequence=1)
+    with urllib.request.urlopen(f"{base_url}/api/session-recap/sx") as resp:
+        data = json.loads(resp.read())
+    assert "full" in data and "oneline" in data and "excerpt" in data
+    assert data["full"]  # non-empty recap body (fake runner supplies it)
+
+
+def test_api_session_recap_unknown_sid_404(running_server):
+    base_url, _, _ = running_server
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(f"{base_url}/api/session-recap/nope")
+    assert exc.value.code == 404

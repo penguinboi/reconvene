@@ -308,3 +308,14 @@ table td, table th {
   border: 1px solid var(--dot-active);
   border-radius: 6px;
 }
+
+/* Resume disabled until a session is chosen (loose/topic groups) */
+#modalConfirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.recap-loading {
+  margin-top: 8px;
+  opacity: 0.6;
+  font-style: italic;
+}
