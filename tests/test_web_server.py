@@ -509,6 +509,38 @@ def test_static_path_with_foreign_host_is_forbidden(running_server):
     assert exc.value.code == 403
 
 
+def test_api_search_returns_session_hits(running_server, ccrider_db):
+    base_url, _, _ = running_server
+    add_session(ccrider_db, "s9", "/Users/x/Code/netstuff", "2026-07-09 00:00:00", message_count=8)
+    add_message(ccrider_db, "s9", "user", "set up pihole dns blocking", sequence=1)
+    with urllib.request.urlopen(f"{base_url}/api/search?q=pihole") as resp:
+        data = json.loads(resp.read())
+    (hit,) = data["results"]
+    assert hit["session_id"] == "s9"
+    assert hit["project"] == "netstuff"
+    assert hit["hits"] == 1
+    assert "«pihole»" in hit["snippet"]
+    assert hit["cwd"] == "/Users/x/Code/netstuff"  # not under the test runner's real $HOME
+
+
+def test_api_search_empty_query_returns_empty(running_server):
+    base_url, _, _ = running_server
+    with urllib.request.urlopen(f"{base_url}/api/search?q=") as resp:
+        assert json.loads(resp.read()) == {"results": []}
+
+
+def test_api_resume_works_for_unclassified_sessions(running_server, ccrider_db):
+    # A 2-message session is noise-dropped from the journal, but search can surface it,
+    # so resume must find it too.
+    base_url, resumed, _ = running_server
+    add_session(ccrider_db, "tiny", "/Users/x/Code/scratchpaddy", "2026-07-09 00:00:00", message_count=2)
+    add_message(ccrider_db, "tiny", "user", "quick thing", sequence=1)
+    req = urllib.request.Request(f"{base_url}/api/resume/tiny", method="POST")
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
+    assert resumed == [("tiny", "/Users/x/Code/scratchpaddy", "2026-07-09 00:00:00")]
+
+
 def test_post_with_localhost_host_and_origin_succeeds(running_server):
     # The allowlist accepts localhost as well as 127.0.0.1; confirm that branch end-to-end.
     base_url, _, config = running_server

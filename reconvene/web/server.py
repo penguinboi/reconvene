@@ -4,12 +4,14 @@ import json
 import mimetypes
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
+from ..classify import canonical_name
 from ..config import save_config
 from ..db import load_sessions
 from ..journal import abbreviate_home, build_journal, build_settings_projects, recency_bucket, relative_time
 from ..recap import RecapCache, ensure_recaps, excerpt, first_user_message
+from ..search import search_sessions
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -143,6 +145,27 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                     "config": _redacted_config(config),
                 })
                 return
+            if path == "/api/search":
+                q = parse_qs(urlparse(self.path).query).get("q", [""])[0]
+                try:
+                    hits = search_sessions(db_path, q)
+                except RuntimeError as e:
+                    self._send_json(500, {"error": str(e)})
+                    return
+                self._send_json(200, {"results": [
+                    {
+                        "session_id": h.session_id,
+                        "project": canonical_name(h.project_path),
+                        "cwd": abbreviate_home(h.project_path),
+                        "updated_at": h.updated_at,
+                        "relative": relative_time(h.updated_at),
+                        "message_count": h.message_count,
+                        "hits": h.hits,
+                        "snippet": h.snippet,
+                    }
+                    for h in hits
+                ]})
+                return
             rel_path = "index.html" if path == "/" else path.lstrip("/")
             self._send_static(rel_path)
 
@@ -155,10 +178,8 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             body = self.rfile.read(length) if length else b"{}"
             if path.startswith("/api/resume/"):
                 session_id = path[len("/api/resume/"):]
-                sessions = load_sessions(db_path)
-                real, bots = build_journal(sessions, config)
                 match = next(
-                    (s for p in real + bots for s in p.sessions if s.session_id == session_id),
+                    (s for s in load_sessions(db_path) if s.session_id == session_id),
                     None,
                 )
                 if match is None:
