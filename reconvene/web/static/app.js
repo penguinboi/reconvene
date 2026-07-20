@@ -20,6 +20,27 @@ function showConfirmModal(project) {
   const modal = document.getElementById("confirmModal");
   modal.dataset.sessionId = project.latest_session_id;
   modal.dataset.projectName = project.name;
+  const list = document.getElementById("modalSessions");
+  list.innerHTML = "";
+  fetch(`/api/sessions/${encodeURIComponent(project.name)}`)
+    .then((r) => r.json())
+    .then((data) => {
+      if (!data.sessions || data.sessions.length < 2) return; // one session: nothing to pick
+      for (const s of data.sessions) {
+        const row = document.createElement("div");
+        row.className = "session-row";
+        if (s.session_id === modal.dataset.sessionId) row.classList.add("selected");
+        row.textContent = `${s.relative} · ${s.message_count} msgs · ${s.first_msg}`;
+        row.addEventListener("click", () => {
+          modal.dataset.sessionId = s.session_id;
+          list.querySelectorAll(".session-row.selected")
+            .forEach((n) => n.classList.remove("selected"));
+          row.classList.add("selected");
+        });
+        list.appendChild(row);
+      }
+    })
+    .catch((err) => console.error(`Failed to fetch sessions for ${project.name}:`, err));
   modal.classList.remove("hidden");
 }
 
@@ -173,6 +194,7 @@ function showSessionModal(hit) {
   const modal = document.getElementById("confirmModal");
   modal.dataset.sessionId = hit.session_id;
   modal.dataset.projectName = hit.project;
+  document.getElementById("modalSessions").innerHTML = "";
   modal.classList.remove("hidden");
 }
 

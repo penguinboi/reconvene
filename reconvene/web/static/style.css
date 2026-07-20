@@ -270,3 +270,20 @@ table td, table th {
   font-weight: 700;
   text-decoration: underline;
 }
+
+/* Session picker inside the resume modal */
+.session-row {
+  padding: 6px 8px;
+  margin: 4px 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-row:hover { background: var(--card-bg); }
+.session-row.selected {
+  border-color: var(--dot-active);
+  background: var(--card-bg);
+}

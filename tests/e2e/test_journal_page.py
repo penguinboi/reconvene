@@ -236,3 +236,23 @@ def test_resume_failure_shows_inline_error(page, e2e_server_failing_resume, ccri
     error.wait_for()
     assert "Couldn't resume" in error.inner_text()
     assert resumed == []
+
+
+def test_modal_lets_user_pick_an_older_session(page, e2e_server, ccrider_db):
+    base_url, resumed, _, _ = e2e_server
+    add_session(ccrider_db, "old", "/Users/x/Code/myproject", "2026-07-01 00:00:00", message_count=50)
+    add_message(ccrider_db, "old", "user", "the nas deep dive", sequence=1)
+    add_session(ccrider_db, "new", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "new", "user", "quick tweak", sequence=1)
+
+    page.goto(base_url)
+    page.locator(".project").first.click()
+    rows = page.locator(".session-row")
+    rows.nth(1).wait_for()
+    assert rows.count() == 2
+    assert "the nas deep dive" in rows.nth(1).inner_text()
+
+    rows.nth(1).click()  # select the older session
+    page.locator("#modalConfirm").click()
+    page.wait_for_timeout(300)
+    assert [r[0] for r in resumed] == ["old"]
