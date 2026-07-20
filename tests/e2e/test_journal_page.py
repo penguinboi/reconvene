@@ -316,7 +316,9 @@ def test_page_has_penguinboi_brand(page, e2e_server, ccrider_db):
     # Topbar penguin logo
     logo = page.locator("img.topbar-logo")
     assert logo.count() == 1
-    assert "favicon" in logo.get_attribute("src")
+    assert "penguin-mascot" in logo.get_attribute("src")  # the waving-penguin mascot, not the favicon
+    # The browser-tab favicon is still the penguin+d20 icon
+    assert page.locator("head link[rel='icon'][href*='favicon']").count() >= 1
     # Footer attribution linking to penguinboisoftware.com
     footer_link = page.locator(".site-footer a[href='https://penguinboisoftware.com']")
     assert footer_link.count() == 1
