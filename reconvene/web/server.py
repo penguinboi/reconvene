@@ -137,6 +137,25 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 oneline, full = recaps.get(project.name, ("", "(no recap)"))
                 self._send_json(200, {"oneline": oneline, "full": full, "excerpt": excerpt(full)})
                 return
+            if path.startswith("/api/sessions/"):
+                name = unquote(path[len("/api/sessions/"):])
+                sessions = load_sessions(db_path)
+                real, bots = build_journal(sessions, config)
+                project = next((p for p in real + bots if p.name == name), None)
+                if project is None:
+                    self._send_json(404, {"error": f"no project named {name!r}"})
+                    return
+                self._send_json(200, {"sessions": [
+                    {
+                        "session_id": s.session_id,
+                        "updated_at": s.updated_at,
+                        "relative": relative_time(s.updated_at),
+                        "message_count": s.message_count,
+                        "first_msg": first_user_message(db_path, s.session_id),
+                    }
+                    for s in project.sessions
+                ]})
+                return
             if path == "/api/settings":
                 sessions = load_sessions(db_path)
                 projects = build_settings_projects(sessions, config)

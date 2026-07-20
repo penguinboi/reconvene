@@ -541,6 +541,24 @@ def test_api_resume_works_for_unclassified_sessions(running_server, ccrider_db):
     assert resumed == [("tiny", "/Users/x/Code/scratchpaddy", "2026-07-09 00:00:00")]
 
 
+def test_api_sessions_lists_project_sessions_newest_first(running_server, ccrider_db):
+    base_url, _, _ = running_server
+    add_session(ccrider_db, "r2", "/Users/x/Code/myproject", "2026-07-09 00:00:00", message_count=20)
+    add_message(ccrider_db, "r2", "user", "second thread", sequence=1)
+    with urllib.request.urlopen(f"{base_url}/api/sessions/myproject") as resp:
+        data = json.loads(resp.read())
+    assert [s["session_id"] for s in data["sessions"]] == ["r2", "r1"]
+    assert data["sessions"][0]["first_msg"] == "second thread"
+    assert data["sessions"][0]["message_count"] == 20
+
+
+def test_api_sessions_unknown_project_404(running_server):
+    base_url, _, _ = running_server
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(f"{base_url}/api/sessions/nope")
+    assert exc.value.code == 404
+
+
 def test_post_with_localhost_host_and_origin_succeeds(running_server):
     # The allowlist accepts localhost as well as 127.0.0.1; confirm that branch end-to-end.
     base_url, _, config = running_server
