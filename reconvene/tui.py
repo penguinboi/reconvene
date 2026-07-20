@@ -182,7 +182,11 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
             if key == "ctrl-s":
                 continue  # ctrl-s on a separator/empty line: just re-show the list
             return 0      # separator picked with enter
-        if key == "ctrl-s":
+        # ctrl-s always drills in. Enter also drills into a loose/topic group with >1 session: those
+        # aggregate unrelated sessions, so resuming "the latest" would be an arbitrary guess — the user
+        # must pick. A real project (or a single-session group) keeps Enter = resume its latest.
+        drill = key == "ctrl-s" or (project.kind != "project" and project.count > 1)
+        if drill:
             session_lines = [render_session_line(s, db_path) for s in project.sessions]
             _, s_chosen = active_session_picker(session_lines)
             if not s_chosen:

@@ -293,3 +293,45 @@ def test_render_line_marks_topic_and_loose_kinds():
     p2 = _p("~/Code (loose sessions)", "real", "s2", "/Users/x/Code", "2026-07-08 10:00:00")
     p2.kind = "loose"
     assert tui.render_line(p2).endswith("· unorganized")
+
+
+def test_run_tui_enter_on_loose_group_drills_into_sessions(tmp_path, ccrider_db):
+    # 3 real projects under /Users/x/Code make it a root; two sessions launched from bare /Users/x/Code
+    # are "loose". Pressing Enter (not ctrl-s) on that group must open the session picker rather than
+    # resume the arbitrary latest session — the loose group's sessions are unrelated.
+    for sub in ("a", "b", "c"):
+        add_session(ccrider_db, f"p{sub}", f"/Users/x/Code/{sub}", "2026-07-01 00:00:00", message_count=10)
+        add_message(ccrider_db, f"p{sub}", "user", "work", sequence=1)
+    add_session(ccrider_db, "loose_new", "/Users/x/Code", "2026-07-08 00:00:00", message_count=20)
+    add_message(ccrider_db, "loose_new", "user", "newer loose", sequence=1)
+    add_session(ccrider_db, "loose_old", "/Users/x/Code", "2026-07-02 00:00:00", message_count=30)
+    add_message(ccrider_db, "loose_old", "user", "older loose", sequence=1)
+    resumed = []
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=lambda lines: ("", next(l for l in lines if "loose sessions" in l)),          # Enter on the loose group
+        session_picker=lambda lines: ("", next(l for l in lines if l.startswith("loose_old\t"))),  # pick the older one
+        resumer=lambda sid, cwd, updated, config: resumed.append(sid),
+    )
+    assert rc == 0
+    assert resumed == ["loose_old"]  # drilled in and picked, NOT resume-latest (loose_new)
+
+
+def test_run_tui_enter_on_single_session_loose_group_resumes_directly(tmp_path, ccrider_db):
+    # A loose group with only one session has nothing to choose — Enter resumes it directly (no picker).
+    for sub in ("a", "b", "c"):
+        add_session(ccrider_db, f"p{sub}", f"/Users/x/Code/{sub}", "2026-07-01 00:00:00", message_count=10)
+        add_message(ccrider_db, f"p{sub}", "user", "work", sequence=1)
+    add_session(ccrider_db, "solo", "/Users/x/Code", "2026-07-08 00:00:00", message_count=20)
+    add_message(ccrider_db, "solo", "user", "the only loose one", sequence=1)
+    resumed = []
+    session_picker_calls = []
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=lambda lines: ("", next(l for l in lines if "loose sessions" in l)),
+        session_picker=lambda lines: session_picker_calls.append(lines) or ("", None),
+        resumer=lambda sid, cwd, updated, config: resumed.append(sid),
+    )
+    assert rc == 0
+    assert resumed == ["solo"]              # resumed directly
+    assert session_picker_calls == []       # picker never opened for a 1-session group
