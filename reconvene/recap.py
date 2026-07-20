@@ -72,6 +72,50 @@ def build_prompt(project, db_path, recent=RECENT_SESSIONS_FOR_RECAP, per_session
     return PROMPT_TEMPLATE.format(name=project.name, transcript="\n\n".join(blocks))
 
 
+SESSION_PROMPT_TEMPLATE = (
+    "You are summarizing ONE coding-agent session so the developer can decide whether to resume it. "
+    "The transcript may open with tooling text (e.g. a recap-generation prompt) — ignore that and "
+    "summarize the actual work.\n\n"
+    "Respond in EXACTLY this format and nothing else:\n"
+    "ONELINE: <one sentence, <=90 chars, what this session was about / last worked on>\n"
+    "DETAIL: <a detailed summary, up to 400 words across 2-4 paragraphs. Cover: what was being "
+    "worked on and why, the concrete changes/decisions, any bugs found and how they were fixed, the "
+    "state at the end, and a specific recommended next step. Full sentences, not fragments.>\n\n"
+    "{transcript}"
+)
+
+SESSION_CACHE_PREFIX = "session:"
+
+
+def build_session_prompt(session, db_path, message_limit=200, char_cap=14000) -> str:
+    msgs = session_messages(db_path, session.session_id, limit=message_limit)
+    text = "\n".join(f"{sender}: {body}" for sender, body in msgs)
+    return SESSION_PROMPT_TEMPLATE.format(transcript=text[:char_cap])
+
+
+def derive_session_recap(session, db_path) -> tuple[str, str]:
+    oneline = first_user_message(db_path, session.session_id) or "(no recap)"
+    return oneline, oneline
+
+
+def ensure_session_recap(session, db_path, cache, config, runner=None) -> tuple[str, str]:
+    # Cache-first per-session recap, keyed by the session id (namespaced so it can't collide with a
+    # project recap in the same table) plus the session's own signature (so a grown session refreshes).
+    # Mirrors ensure_recaps: 'none' auth derives from the first message, otherwise claude -p summarizes.
+    key = SESSION_CACHE_PREFIX + session.session_id
+    sig = signature([session])
+    hit = cache.get(key, sig)
+    if hit is not None:
+        return hit
+    if config.recap_auth_mode == "none":
+        oneline, full = derive_session_recap(session, db_path)
+    else:
+        run = runner or (lambda prompt: claude_runner(prompt, config))
+        oneline, full = parse_recap(run(build_session_prompt(session, db_path)))
+    cache.put(key, sig, oneline, full)
+    return oneline, full
+
+
 def parse_recap(output: str) -> tuple[str, str]:
     oneline, detail = "", ""
     for line in output.splitlines():

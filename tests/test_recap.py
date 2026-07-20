@@ -172,3 +172,65 @@ def test_claude_runner_strips_inherited_api_key_in_cli_mode(monkeypatch):
     monkeypatch.setattr("reconvene.recap.subprocess.run", fake_run)
     claude_runner("a prompt", Config())  # default recap_auth_mode="claude_cli"
     assert "ANTHROPIC_API_KEY" not in captured["env"]
+
+
+def _session(sid="s1", path="/Users/x/Code/myproject", updated="2026-07-08 10:00:00", count=12):
+    return Session(sid, path, updated, updated, count, None, None)
+
+
+def test_ensure_session_recap_generates_via_runner_and_caches(tmp_path, ccrider_db):
+    from tests.conftest import add_session, add_message
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "tune the nas raid", sequence=1)
+    from reconvene.recap import ensure_session_recap
+    calls = []
+    def runner(prompt):
+        calls.append(prompt)
+        return "ONELINE: nas tune-up\nDETAIL: worked on the synology raid"
+    cache = RecapCache(str(tmp_path / "r.db"))
+    one, full = ensure_session_recap(_session(), str(ccrider_db), cache, Config(), runner=runner)
+    assert one == "nas tune-up" and "synology raid" in full
+    assert len(calls) == 1
+    # second call is a cache hit — runner not invoked again
+    ensure_session_recap(_session(), str(ccrider_db), cache, Config(), runner=runner)
+    assert len(calls) == 1
+    cache.close()
+
+
+def test_ensure_session_recap_none_auth_derives_without_runner(tmp_path, ccrider_db):
+    from tests.conftest import add_session, add_message
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "tune the nas raid", sequence=1)
+    from reconvene.recap import ensure_session_recap
+    calls = []
+    cache = RecapCache(str(tmp_path / "r.db"))
+    one, full = ensure_session_recap(_session(), str(ccrider_db), cache,
+                                     Config(recap_auth_mode="none"),
+                                     runner=lambda p: calls.append(p) or "")
+    assert "tune the nas raid" in full
+    assert calls == []  # no claude call in none mode
+    cache.close()
+
+
+def test_ensure_session_recap_key_does_not_collide_with_project(tmp_path, ccrider_db):
+    from tests.conftest import add_session, add_message
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "hi", sequence=1)
+    from reconvene.recap import ensure_session_recap, signature
+    cache = RecapCache(str(tmp_path / "r.db"))
+    # A project recap stored under the bare name must not be returned as a session recap.
+    cache.put("s1", signature([_session()]), "proj one", "project recap body")
+    _, full = ensure_session_recap(_session(), str(ccrider_db), cache,
+                                   Config(recap_auth_mode="none"), runner=lambda p: "")
+    assert full != "project recap body"  # session recap is namespaced (session:s1)
+    cache.close()
+
+
+def test_build_session_prompt_includes_transcript(ccrider_db):
+    from tests.conftest import add_session, add_message
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "summarize the raid migration", sequence=1)
+    from reconvene.recap import build_session_prompt
+    prompt = build_session_prompt(_session(), str(ccrider_db))
+    assert "summarize the raid migration" in prompt
+    assert "ONELINE:" in prompt and "DETAIL:" in prompt

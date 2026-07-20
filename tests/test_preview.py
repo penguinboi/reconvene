@@ -76,9 +76,29 @@ def test_preview_generation_failure_is_graceful(tmp_path, ccrider_db):
     assert "Traceback" not in out
 
 
-def test_preview_session_mode_shows_first_message_and_summary(tmp_path, ccrider_db):
-    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00",
-                message_count=12, summary="ccrider's own summary")
+def test_preview_session_mode_shows_header_and_generated_recap(tmp_path, ccrider_db):
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "tune the nas raid", sequence=1)
+    # Inject the session-recap fn so no claude runs; assert the header + the recap body both show.
+    def fake_session_recap(session, db_path, cache, config):
+        assert session.session_id == "s1"
+        return ("one liner", "the full generated session recap")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = _preview.main(["s1", str(ccrider_db), str(tmp_path / "r.db"),
+                            _none_config(tmp_path), "--session"],
+                           session_recaps_fn=fake_session_recap)
+    out = buf.getvalue()
+    assert rc == 0
+    assert "myproject" in out                     # header: canonical project name
+    assert "12 messages" in out                   # header: message count
+    assert "the full generated session recap" in out  # the recap body, not the raw first message
+
+
+def test_preview_session_mode_none_auth_derives_recap(tmp_path, ccrider_db):
+    # With recap_auth_mode="none" (no claude), the real ensure_session_recap derives from the first
+    # user message — proving the default path renders without a fake and without calling claude.
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "s1", "user", "tune the nas raid", sequence=1)
     buf = io.StringIO()
     with redirect_stdout(buf):
@@ -86,10 +106,22 @@ def test_preview_session_mode_shows_first_message_and_summary(tmp_path, ccrider_
                             _none_config(tmp_path), "--session"])
     out = buf.getvalue()
     assert rc == 0
-    assert "myproject" in out
-    assert "12 messages" in out
     assert "tune the nas raid" in out
-    assert "ccrider's own summary" in out
+
+
+def test_preview_session_mode_recap_failure_is_graceful(tmp_path, ccrider_db):
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "hi", sequence=1)
+    def boom(*a):
+        raise RuntimeError("claude exploded")
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        _preview.main(["s1", str(ccrider_db), str(tmp_path / "r.db"),
+                       _none_config(tmp_path), "--session"], session_recaps_fn=boom)
+    out = buf.getvalue()
+    assert "⚠ recap unavailable" in out
+    assert "claude exploded" in out
+    assert "Traceback" not in out
 
 
 def test_preview_session_mode_unknown_sid(tmp_path, ccrider_db):

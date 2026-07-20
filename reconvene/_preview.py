@@ -1,4 +1,4 @@
-# ABOUTME: fzf --preview target — prints one project's stats header + recap on demand.
+# ABOUTME: fzf --preview target — prints a project's (or, with --session, one session's) header + recap.
 # ABOUTME: Cache-first; generates (via claude) only on a miss, so the TUI never blocks up front.
 import sys
 
@@ -7,7 +7,7 @@ from .config import load_config
 from .constants import RECENT_SESSIONS_FOR_RECAP
 from .db import load_sessions
 from .journal import abbreviate_home, build_journal, relative_time
-from .recap import RecapCache, ensure_recaps, first_user_message, signature
+from .recap import RecapCache, ensure_recaps, ensure_session_recap, signature
 from .tui import render_header
 
 
@@ -41,20 +41,31 @@ def _print_recap(project, db_path, cache_path, config, recaps_fn):
         cache.close()
 
 
-def _print_session_detail(session, db_path):
-    print(canonical_name(session.project_path))
-    print(f"session {session.session_id[:8]} · {relative_time(session.updated_at)}"
-          f" · {session.message_count} messages")
-    print(f"path  {abbreviate_home(session.project_path)}")
-    print("─" * 46)
-    print()
-    print(first_user_message(db_path, session.session_id, limit=400) or "(no messages)")
-    if session.summary:
-        print()
-        print(session.summary)
+def _render_session_header(session) -> str:
+    return "\n".join([
+        canonical_name(session.project_path),
+        f"session {session.session_id[:8]} · {relative_time(session.updated_at)}"
+        f" · {session.message_count} messages",
+        f"path  {abbreviate_home(session.project_path)}",
+        "─" * 46,
+    ])
 
 
-def main(argv, *, recaps_fn=ensure_recaps) -> int:
+def _print_session_recap(session, db_path, cache_path, config, session_recaps_fn):
+    # Cache-first per-session recap, same no-placeholder streaming contract as _print_recap: the
+    # header (flushed by the caller) stays visible while claude runs, then the recap fills in below.
+    cache = RecapCache(cache_path)
+    try:
+        try:
+            _, body = session_recaps_fn(session, db_path, cache, config)
+        except Exception as e:
+            body = f"⚠ recap unavailable: {e}"
+        print(body)
+    finally:
+        cache.close()
+
+
+def main(argv, *, recaps_fn=ensure_recaps, session_recaps_fn=ensure_session_recap) -> int:
     session_mode = "--session" in argv
     argv = [a for a in argv if a != "--session"]
     session_id, db_path, cache_path, config_path = argv[0], argv[1], argv[2], argv[3]
@@ -65,7 +76,9 @@ def main(argv, *, recaps_fn=ensure_recaps) -> int:
             if session is None:
                 print("(session not found)")
                 return 0
-            _print_session_detail(session, db_path)
+            print(_render_session_header(session), flush=True)
+            print()  # blank line between header and body
+            _print_session_recap(session, db_path, cache_path, config, session_recaps_fn)
             return 0
         project = _find_project(config, db_path, cache_path, session_id)
     except Exception as e:
