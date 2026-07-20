@@ -20,7 +20,11 @@ def running_server(tmp_path, ccrider_db):
     resumed = []
     def fake_resumer(session_id, cwd, updated_at):
         resumed.append((session_id, cwd, updated_at))
-    fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
+    def fake_recap_runner(prompt):
+        if "organizing loose" in prompt:
+            return "\n".join(f"{sid}: Homelab Fixes"
+                             for sid in ("loose1",) if sid in prompt)
+        return "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
                    fake_resumer, recap_runner=fake_recap_runner, port=0)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -589,3 +593,33 @@ def test_api_journal_reports_kind_and_topic_groups(running_server, ccrider_db, t
     kinds = {p["name"]: p["kind"] for p in data["real"]}
     assert kinds["myproject"] == "project"
     assert any(k == "loose" for k in kinds.values())
+
+
+def _add_root_fixture(ccrider_db):
+    for i, sub in enumerate(("alpha", "beta", "gamma")):
+        add_session(ccrider_db, f"rp{i}", f"/Users/x/Code/{sub}", "2026-07-01 00:00:00", message_count=10)
+        add_message(ccrider_db, f"rp{i}", "user", "work", sequence=1)
+    add_session(ccrider_db, "loose1", "/Users/x/Code", "2026-07-09 00:00:00", message_count=20)
+    add_message(ccrider_db, "loose1", "user", "pihole things", sequence=1)
+
+
+def test_topics_refresh_assigns_and_journal_shows_topic(running_server, ccrider_db):
+    base_url, _, _ = running_server
+    _add_root_fixture(ccrider_db)
+    req = urllib.request.Request(f"{base_url}/api/topics/refresh", method="POST")
+    with urllib.request.urlopen(req) as resp:
+        assert json.loads(resp.read()) == {"assigned": 1}
+    with urllib.request.urlopen(f"{base_url}/api/journal") as resp:
+        data = json.loads(resp.read())
+    topic = next(p for p in data["real"] if p["kind"] == "topic")
+    assert topic["name"] == "Homelab Fixes"
+
+
+def test_topics_refresh_auth_none_is_409(running_server, ccrider_db):
+    base_url, _, config = running_server
+    _add_root_fixture(ccrider_db)
+    config.recap_auth_mode = "none"
+    req = urllib.request.Request(f"{base_url}/api/topics/refresh", method="POST")
+    with pytest.raises(HTTPError) as exc:
+        urllib.request.urlopen(req)
+    assert exc.value.code == 409

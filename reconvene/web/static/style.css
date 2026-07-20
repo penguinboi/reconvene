@@ -287,3 +287,24 @@ table td, table th {
   border-color: var(--dot-active);
   background: var(--card-bg);
 }
+
+/* Topic groups */
+.kind-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 0.75em;
+  border: 1px solid var(--dot-recent);
+  border-radius: 10px;
+  vertical-align: middle;
+}
+.organize-btn {
+  float: right;
+  font: inherit;
+  font-size: 0.85em;
+  padding: 3px 10px;
+  cursor: pointer;
+  color: inherit;
+  background: var(--card-bg);
+  border: 1px solid var(--dot-active);
+  border-radius: 6px;
+}

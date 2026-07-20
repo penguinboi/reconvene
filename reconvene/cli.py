@@ -72,16 +72,10 @@ def main(argv=None, *, input_fn=input, stdin_isatty=None,
     ap.add_argument("--config", default=str(CONFIG_PATH), help="config file path")
     ap.add_argument("-s", "--search", nargs="?", const="", default=None, metavar="QUERY",
                     help="open the TUI directly in search mode (optional initial query)")
+    ap.add_argument("--organize", action="store_true",
+                    help="cluster loose (root-launched) sessions into topics and exit")
     ap.add_argument("-V", "--version", action="version", version=f"reconvene {VERSION}")
     args = ap.parse_args(argv)
-
-    interactive = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
-    if args.search is not None:
-        mode = "tui"
-    else:
-        mode = _choose_frontend(input_fn) if interactive else "web"
-    if mode is None:
-        return 0  # user cancelled the chooser
 
     if not args.no_sync and args.db == str(CCRIDER_DB):
         try:
@@ -97,6 +91,43 @@ def main(argv=None, *, input_fn=input, stdin_isatty=None,
             print(f"warning: `ccrider sync` exited {result.returncode}; showing possibly-stale data", file=sys.stderr)
 
     config = load_config(args.config)
+
+    if args.organize:
+        from .cluster import TopicAuthError, TopicCache, organize, unassigned_loose_sessions
+        from .db import load_sessions
+        sessions = load_sessions(args.db)
+        cache = TopicCache(args.cache)
+        try:
+            unassigned = unassigned_loose_sessions(sessions, cache.get_all())
+            try:
+                n = organize(unassigned, args.db, cache, config, runner=None)
+            except TopicAuthError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 1
+            except Exception as e:
+                print(f"error: clustering failed: {e}", file=sys.stderr)
+                return 1
+            lookup = cache.get_all()
+        finally:
+            cache.close()
+        by_topic: dict[str, int] = {}
+        for s in unassigned:
+            topic = lookup.get(s.session_id)
+            if topic:
+                by_topic[topic] = by_topic.get(topic, 0) + 1
+        print(f"assigned {n} session{'s' if n != 1 else ''}")
+        for topic, count in sorted(by_topic.items()):
+            print(f"  {topic}: {count}")
+        return 0
+
+    interactive = sys.stdin.isatty() if stdin_isatty is None else stdin_isatty
+    if args.search is not None:
+        mode = "tui"
+    else:
+        mode = _choose_frontend(input_fn) if interactive else "web"
+    if mode is None:
+        return 0  # user cancelled the chooser
+
     if mode == "tui":
         return (launch_tui or run_tui)(config, args.db, args.cache, args.config, args.bots,
                                         initial_search=args.search)

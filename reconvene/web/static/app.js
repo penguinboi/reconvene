@@ -79,6 +79,32 @@ async function loadJournal() {
     countEl.className = "count";
     countEl.textContent = ` · ${project.count} sessions`;
     div.append(dot, nameEl, countEl);
+    if (project.kind === "topic") {
+      const tag = document.createElement("span");
+      tag.className = "kind-tag";
+      tag.textContent = "topic";
+      div.appendChild(tag);
+    }
+    if (project.kind === "loose") {
+      const btn = document.createElement("button");
+      btn.className = "organize-btn";
+      btn.textContent = "Organize into topics";
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation(); // don't open the resume modal
+        btn.disabled = true;
+        btn.textContent = "Organizing…";
+        const res = await fetch("/api/topics/refresh", { method: "POST" });
+        if (!res.ok) {
+          const data = await res.json();
+          showError(`Organize failed: ${data.error}`);
+          btn.disabled = false;
+          btn.textContent = "Organize into topics";
+          return;
+        }
+        loadJournal();
+      });
+      div.appendChild(btn);
+    }
     div.appendChild(metaLineEl);
     div.appendChild(metaEl);
     div.addEventListener("click", () => showConfirmModal(project));

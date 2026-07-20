@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ..classify import canonical_name
-from ..cluster import load_topic_lookup
+from ..cluster import TopicAuthError, TopicCache, load_topic_lookup, organize, unassigned_loose_sessions
 from ..config import save_config
 from ..db import load_sessions
 from ..journal import abbreviate_home, build_journal, build_settings_projects, recency_bucket, relative_time
@@ -231,6 +231,23 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 config.claude_extra_args = data.get("claude_extra_args", config.claude_extra_args)
                 save_config(config, config_path)
                 self._send_json(200, {"status": "saved", "config": _redacted_config(config)})
+                return
+            if path == "/api/topics/refresh":
+                sessions = load_sessions(db_path)
+                cache = TopicCache(cache_path)
+                try:
+                    unassigned = unassigned_loose_sessions(sessions, cache.get_all())
+                    try:
+                        n = organize(unassigned, db_path, cache, config, runner=recap_runner)
+                    except TopicAuthError as e:
+                        self._send_json(409, {"error": str(e)})
+                        return
+                    except Exception as e:
+                        self._send_json(502, {"error": f"clustering failed: {e}"})
+                        return
+                finally:
+                    cache.close()
+                self._send_json(200, {"assigned": n})
                 return
             self.send_response(404)
             self.end_headers()

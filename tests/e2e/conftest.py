@@ -14,6 +14,8 @@ def _start_server(tmp_path, ccrider_db, resumer):
     save_config(config, config_path)
 
     def fake_recap_runner(prompt):
+        if "organizing loose" in prompt:
+            return "loose1: Homelab Fixes"
         return "ONELINE: full recap text\nDETAIL: full recap text"
 
     server = serve(

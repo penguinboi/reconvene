@@ -256,3 +256,18 @@ def test_modal_lets_user_pick_an_older_session(page, e2e_server, ccrider_db):
     page.locator("#modalConfirm").click()
     page.wait_for_timeout(300)
     assert [r[0] for r in resumed] == ["old"]
+
+
+def test_organize_button_clusters_loose_sessions(page, e2e_server, ccrider_db):
+    base_url, _, _, _ = e2e_server
+    for i, sub in enumerate(("alpha", "beta", "gamma")):
+        add_session(ccrider_db, f"rp{i}", f"/Users/x/Code/{sub}", "2026-07-01 00:00:00", message_count=10)
+        add_message(ccrider_db, f"rp{i}", "user", "work", sequence=1)
+    add_session(ccrider_db, "loose1", "/Users/x/Code", "2026-07-09 00:00:00", message_count=20)
+    add_message(ccrider_db, "loose1", "user", "pihole things", sequence=1)
+
+    page.goto(base_url)
+    button = page.locator(".organize-btn")
+    button.wait_for()
+    button.click()
+    page.get_by_text("Homelab Fixes").wait_for()

@@ -37,11 +37,22 @@ ln -s "$PWD/bin/reconvene" ~/.local/bin/reconvene
 reconvene              # asks: [1] Web view or [2] TUI, then syncs ccrider and opens it
 reconvene --no-sync    # skip the ccrider sync step
 reconvene -b           # TUI: also list automated-runs (bot) projects
+reconvene -s "nas"     # jump straight into full-text session search (TUI)
+reconvene --organize   # cluster loose (root-launched) sessions into named topics
 ```
 
 Running `reconvene` in a terminal prompts you to choose the **Web view** (opens your browser to
 the project journal) or the **TUI** (an fzf picker in the terminal that hands off to
 `claude --resume` when you select a session). Non-interactive invocations run the web view.
+
+**Search** (web: the box in the top bar · TUI: `ctrl-f`, or `-s` from the shell) runs
+full-text search over every session's message text, using the FTS index ccrider
+already maintains. **Drill-in** lets you resume any session, not just a project's
+latest: click a project card and pick from its session list (web), or press `ctrl-s`
+on a project (TUI). Sessions launched from a bare root directory like `~/Code` are
+collected separately; hit **Organize into topics** (web) or `reconvene --organize`
+to have Claude cluster them into named topic groups (assignments are cached and
+never reshuffled).
 
 Pick a project in the web view and Reconvene shows the full recap before resuming:
 

@@ -144,3 +144,19 @@ def test_main_search_flag_launches_tui_in_search_mode(tmp_path):
               stdin_isatty=True, input_fn=lambda _: "2", launch_tui=fake_tui)
     assert rc == 0
     assert calls["initial_search"] == "pihole"
+
+
+def test_main_organize_flag_runs_and_exits(tmp_path, capsys, monkeypatch, ccrider_db):
+    from tests.conftest import add_session, add_message
+    for i, sub in enumerate(("alpha", "beta", "gamma")):
+        add_session(ccrider_db, f"rp{i}", f"/Users/x/Code/{sub}", "2026-07-01 00:00:00", message_count=10)
+        add_message(ccrider_db, f"rp{i}", "user", "work", sequence=1)
+    add_session(ccrider_db, "loose1", "/Users/x/Code", "2026-07-09 00:00:00", message_count=20)
+    add_message(ccrider_db, "loose1", "user", "pihole things", sequence=1)
+    monkeypatch.setattr("reconvene.cluster.claude_runner",
+                        lambda prompt, config: "loose1: Homelab Fixes")
+    rc = main(["--no-sync", "--db", str(ccrider_db), "--cache", str(tmp_path / "r.db"),
+               "--config", str(tmp_path / "c.json"), "--organize"],
+              stdin_isatty=True, input_fn=lambda _: "1")
+    assert rc == 0
+    assert "Homelab Fixes" in capsys.readouterr().out
