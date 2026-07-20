@@ -204,3 +204,27 @@ def test_run_tui_ctrl_s_esc_returns_to_projects(tmp_path, ccrider_db):
     )
     assert rc == 0
     assert resumed == []
+
+
+def test_run_tui_session_view_esc_returns_to_projects(tmp_path, ccrider_db):
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "hi", sequence=1)
+    project_picks = iter([("ctrl-s", "s1\tmyproject · ..."), ("", None)])  # drill in, then quit
+    project_pick_calls = []
+    resumed = []
+
+    def picker(lines):
+        pick = next(project_picks)
+        project_pick_calls.append(pick)
+        return pick
+
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=picker,
+        session_picker=lambda lines: ("", None),   # esc from inside the session view
+        resumer=lambda *a: resumed.append(a),
+    )
+    assert rc == 0
+    assert resumed == []
+    # the loop must re-show the project list after the session-view esc, not exit early
+    assert len(project_pick_calls) == 2
