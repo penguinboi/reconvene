@@ -4,10 +4,11 @@ Resume your Claude Code sessions from a browser tab. Reads
 [ccrider](https://github.com/neilberkman/ccrider)'s session database, ranks your
 projects by recent activity, and lets you pick up where you left off.
 
-![The Reconvene journal — projects ranked by recent activity, each with a generated recap](assets/web-journal.png)
+![The Reconvene journal — projects and topic groups ranked by recent activity, each with a generated recap](assets/web-journal.png)
 
 Each project shows an AI-generated recap of your recent sessions, so you can tell at a
-glance what you were doing before you pick one to resume.
+glance what you were doing before you pick one to resume. Sessions launched from a bare
+directory like `~/Code` are clustered into named **topic groups** (the `topic` tags above).
 
 ## Requires
 
@@ -56,14 +57,17 @@ collected separately; hit **Organize into topics** (web) or `reconvene --organiz
 to have Claude cluster them into named topic groups (assignments are cached and
 never reshuffled).
 
-Pick a project in the web view and Reconvene shows the full recap before resuming:
+![Full-text search across every session, with the matching text highlighted](assets/web-search.png)
 
-![Resuming a project — the full recap and a Resume button](assets/web-resume.png)
+Open a project or a topic group and Reconvene shows the recap, then lets you pick exactly
+which session to resume:
 
-Prefer the terminal? The TUI is an fzf picker with the same recaps in a live preview pane,
-generated on demand for whichever project you highlight:
+![The resume modal — a topic group's recap plus its session list to choose from](assets/web-resume.png)
 
-![The Reconvene TUI — an fzf picker with a recap preview pane](assets/tui.png)
+Prefer the terminal? The TUI is an fzf picker (key hints along the top) with the same recaps
+in a live preview pane, `ctrl-f` to search and `ctrl-s` to drill into a project's sessions:
+
+![The Reconvene TUI — an fzf picker with key hints, topic groups, and a recap preview pane](assets/tui.png)
 
 First run has zero configuration — every project is classified automatically. Visit
 Settings (linked from the main page) to override classification for a specific project,
