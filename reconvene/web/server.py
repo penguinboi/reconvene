@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ..classify import canonical_name
+from ..cluster import load_topic_lookup
 from ..config import save_config
 from ..db import load_sessions
 from ..journal import abbreviate_home, build_journal, build_settings_projects, recency_bucket, relative_time
@@ -34,13 +35,14 @@ def _client_category(p):
 def _settings_project(p):
     # The settings table only renders name + category; skip the per-project first-user-message DB
     # lookup (and other display fields) that _project_summary does for the journal.
-    return {"name": p.name, "category": _client_category(p)}
+    return {"name": p.name, "category": _client_category(p), "kind": p.kind}
 
 
 def _project_summary(p, db_path):
     return {
         "name": p.name,
         "category": _client_category(p),
+        "kind": p.kind,
         "count": p.count,
         "last_active": p.last_active,
         "recency": recency_bucket(p.last_active),
@@ -52,6 +54,9 @@ def _project_summary(p, db_path):
 
 
 def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner=None):
+    def _journal(sessions):
+        return build_journal(sessions, config, topic_lookup=load_topic_lookup(cache_path))
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, format, *args):
             pass  # keep test/CLI output quiet
@@ -115,7 +120,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             path = urlparse(self.path).path
             if path == "/api/journal":
                 sessions = load_sessions(db_path)
-                real, bots = build_journal(sessions, config)
+                real, bots = _journal(sessions)
                 self._send_json(200, {
                     "real": [_project_summary(p, db_path) for p in real],
                     "bots": [_project_summary(p, db_path) for p in bots],
@@ -124,7 +129,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             if path.startswith("/api/recap/"):
                 name = unquote(path[len("/api/recap/"):])
                 sessions = load_sessions(db_path)
-                real, bots = build_journal(sessions, config)
+                real, bots = _journal(sessions)
                 project = next((p for p in real + bots if p.name == name), None)
                 if project is None:
                     self._send_json(404, {"error": f"no project named {name!r}"})
@@ -140,7 +145,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             if path.startswith("/api/sessions/"):
                 name = unquote(path[len("/api/sessions/"):])
                 sessions = load_sessions(db_path)
-                real, bots = build_journal(sessions, config)
+                real, bots = _journal(sessions)
                 project = next((p for p in real + bots if p.name == name), None)
                 if project is None:
                     self._send_json(404, {"error": f"no project named {name!r}"})
@@ -158,7 +163,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 return
             if path == "/api/settings":
                 sessions = load_sessions(db_path)
-                projects = build_settings_projects(sessions, config)
+                projects = build_settings_projects(sessions, config, topic_lookup=load_topic_lookup(cache_path))
                 self._send_json(200, {
                     "projects": [_settings_project(p) for p in projects],
                     "config": _redacted_config(config),

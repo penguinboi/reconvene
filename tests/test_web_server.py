@@ -575,3 +575,17 @@ def test_post_with_localhost_host_and_origin_succeeds(running_server):
     with urllib.request.urlopen(req) as resp:
         assert resp.status == 200
     assert config.bot_names == {"myproject"}
+
+
+def test_api_journal_reports_kind_and_topic_groups(running_server, ccrider_db, tmp_path):
+    base_url, _, _ = running_server
+    for i, sub in enumerate(("alpha", "beta", "gamma")):
+        add_session(ccrider_db, f"p{i}", f"/Users/x/Code/{sub}", "2026-07-01 00:00:00", message_count=10)
+        add_message(ccrider_db, f"p{i}", "user", "work", sequence=1)
+    add_session(ccrider_db, "l1", "/Users/x/Code", "2026-07-09 00:00:00", message_count=20)
+    add_message(ccrider_db, "l1", "user", "loose thread", sequence=1)
+    with urllib.request.urlopen(f"{base_url}/api/journal") as resp:
+        data = json.loads(resp.read())
+    kinds = {p["name"]: p["kind"] for p in data["real"]}
+    assert kinds["myproject"] == "project"
+    assert any(k == "loose" for k in kinds.values())

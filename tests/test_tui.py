@@ -284,3 +284,12 @@ def test_search_reload_command_shape():
     assert "{q}" in cmd
     assert "/db/sessions.db" in cmd
     assert "PYTHONPATH=" in cmd
+
+
+def test_render_line_marks_topic_and_loose_kinds():
+    p = _p("NAS & Pi-Hole", "real", "s1", "/Users/x/Code", "2026-07-08 10:00:00")
+    p.kind = "topic"
+    assert tui.render_line(p).endswith("· topic")
+    p2 = _p("~/Code (loose sessions)", "real", "s2", "/Users/x/Code", "2026-07-08 10:00:00")
+    p2.kind = "loose"
+    assert tui.render_line(p2).endswith("· unorganized")

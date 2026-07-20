@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .cluster import load_topic_lookup
 from .db import load_sessions
 from .journal import abbreviate_home, build_journal, relative_time
 from .recap import first_user_message
@@ -16,7 +17,12 @@ SEPARATOR_SID = ""
 
 
 def render_line(project) -> str:
-    return f"{project.name} · {relative_time(project.last_active)} · {project.count} sessions"
+    line = f"{project.name} · {relative_time(project.last_active)} · {project.count} sessions"
+    if project.kind == "topic":
+        line += " · topic"
+    elif project.kind == "loose":
+        line += " · unorganized"
+    return line
 
 
 def render_header(project) -> str:
@@ -126,7 +132,7 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
 
     sessions = load_sessions(db_path)
     all_by_sid = {s.session_id: s for s in sessions}
-    real, bots = build_journal(sessions, config)
+    real, bots = build_journal(sessions, config, topic_lookup=load_topic_lookup(cache_path))
     shown = real + (bots if show_bots else [])
     if not shown:
         if bots:  # bots exist but are hidden without --bots

@@ -11,8 +11,10 @@ from .recap import RecapCache, ensure_recaps, first_user_message, signature
 from .tui import render_header
 
 
-def _find_project(config, db_path, session_id):
-    real, bots = build_journal(load_sessions(db_path), config)
+def _find_project(config, db_path, cache_path, session_id):
+    from .cluster import load_topic_lookup
+    real, bots = build_journal(load_sessions(db_path), config,
+                               topic_lookup=load_topic_lookup(cache_path))
     return next((p for p in real + bots if p.latest.session_id == session_id), None)
 
 
@@ -65,7 +67,7 @@ def main(argv, *, recaps_fn=ensure_recaps) -> int:
                 return 0
             _print_session_detail(session, db_path)
             return 0
-        project = _find_project(config, db_path, session_id)
+        project = _find_project(config, db_path, cache_path, session_id)
     except Exception as e:
         # Bad db/config path etc. — never dump a traceback into the preview pane.
         print(f"⚠ recap unavailable: {e}")

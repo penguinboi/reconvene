@@ -283,3 +283,61 @@ def test_verbose_age_years_singular_and_plural():
 def test_verbose_age_handles_real_ccrider_timestamp_format():
     now = datetime(2026, 7, 13, 10, 12, 20)
     assert verbose_age("2026-07-13 10:12:17.839 +0000 UTC", now=now) == "just now"
+
+
+def _sess(sid, path, updated, count=10):
+    return Session(sid, path, updated, updated, count, None, None)
+
+
+def test_loose_sessions_group_under_fallback_without_topics():
+    sessions = [
+        _sess("p1", "/Users/x/Code/alpha", "2026-07-01 00:00:00"),
+        _sess("p2", "/Users/x/Code/beta", "2026-07-02 00:00:00"),
+        _sess("p3", "/Users/x/Code/gamma", "2026-07-03 00:00:00"),
+        _sess("l1", "/Users/x/Code", "2026-07-08 00:00:00", count=20),
+        _sess("l2", "/Users/x/Code", "2026-07-07 00:00:00", count=30),
+    ]
+    real, bots = build_journal(sessions, Config())
+    loose = [p for p in real if p.kind == "loose"]
+    assert len(loose) == 1
+    assert loose[0].name.endswith(" (loose sessions)")
+    assert {s.session_id for s in loose[0].sessions} == {"l1", "l2"}
+    assert all(p.kind == "project" for p in real if p is not loose[0])
+
+
+def test_loose_sessions_with_topics_become_topic_groups():
+    sessions = [
+        _sess("p1", "/Users/x/Code/alpha", "2026-07-01 00:00:00"),
+        _sess("p2", "/Users/x/Code/beta", "2026-07-02 00:00:00"),
+        _sess("p3", "/Users/x/Code/gamma", "2026-07-03 00:00:00"),
+        _sess("l1", "/Users/x/Code", "2026-07-08 00:00:00", count=20),
+        _sess("l2", "/Users/x/Code", "2026-07-07 00:00:00", count=30),
+    ]
+    real, _ = build_journal(sessions, Config(), topic_lookup={"l1": "NAS & Pi-Hole"})
+    topic = next(p for p in real if p.kind == "topic")
+    assert topic.name == "NAS & Pi-Hole"
+    assert [s.session_id for s in topic.sessions] == ["l1"]
+    assert any(p.kind == "loose" and p.sessions[0].session_id == "l2" for p in real)
+
+
+def test_loose_noise_sessions_still_dropped():
+    sessions = [
+        _sess("p1", "/Users/x/Code/alpha", "2026-07-01 00:00:00"),
+        _sess("p2", "/Users/x/Code/beta", "2026-07-02 00:00:00"),
+        _sess("p3", "/Users/x/Code/gamma", "2026-07-03 00:00:00"),
+        _sess("noise", "/Users/x/Code", "2026-07-08 00:00:00", count=2),
+    ]
+    real, _ = build_journal(sessions, Config())
+    assert not any(p.kind in ("loose", "topic") for p in real)
+
+
+def test_hidden_names_hides_topic_groups():
+    sessions = [
+        _sess("p1", "/Users/x/Code/alpha", "2026-07-01 00:00:00"),
+        _sess("p2", "/Users/x/Code/beta", "2026-07-02 00:00:00"),
+        _sess("p3", "/Users/x/Code/gamma", "2026-07-03 00:00:00"),
+        _sess("l1", "/Users/x/Code", "2026-07-08 00:00:00", count=20),
+    ]
+    config = Config(hidden_names={"nas & pi-hole"})
+    real, _ = build_journal(sessions, config, topic_lookup={"l1": "NAS & Pi-Hole"})
+    assert not any(p.kind == "topic" for p in real)
