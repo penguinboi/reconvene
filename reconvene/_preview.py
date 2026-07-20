@@ -2,11 +2,12 @@
 # ABOUTME: Cache-first; generates (via claude) only on a miss, so the TUI never blocks up front.
 import sys
 
+from .classify import canonical_name
 from .config import load_config
 from .constants import RECENT_SESSIONS_FOR_RECAP
 from .db import load_sessions
-from .journal import build_journal
-from .recap import RecapCache, ensure_recaps, signature
+from .journal import abbreviate_home, build_journal, relative_time
+from .recap import RecapCache, ensure_recaps, first_user_message, signature
 from .tui import render_header
 
 
@@ -38,10 +39,32 @@ def _print_recap(project, db_path, cache_path, config, recaps_fn):
         cache.close()
 
 
+def _print_session_detail(session, db_path):
+    print(canonical_name(session.project_path))
+    print(f"session {session.session_id[:8]} · {relative_time(session.updated_at)}"
+          f" · {session.message_count} messages")
+    print(f"path  {abbreviate_home(session.project_path)}")
+    print("─" * 46)
+    print()
+    print(first_user_message(db_path, session.session_id, limit=400) or "(no messages)")
+    if session.summary:
+        print()
+        print(session.summary)
+
+
 def main(argv, *, recaps_fn=ensure_recaps) -> int:
+    session_mode = "--session" in argv
+    argv = [a for a in argv if a != "--session"]
     session_id, db_path, cache_path, config_path = argv[0], argv[1], argv[2], argv[3]
     try:
         config = load_config(config_path)
+        if session_mode:
+            session = next((s for s in load_sessions(db_path) if s.session_id == session_id), None)
+            if session is None:
+                print("(session not found)")
+                return 0
+            _print_session_detail(session, db_path)
+            return 0
         project = _find_project(config, db_path, session_id)
     except Exception as e:
         # Bad db/config path etc. — never dump a traceback into the preview pane.

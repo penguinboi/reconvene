@@ -1,9 +1,12 @@
 # ABOUTME: Tests for FTS5-backed session search — sanitization, ranking, snippets, errors.
 # ABOUTME: Runs against the fixture's real FTS5 external-content table (porter stemming included).
+import io
 import sqlite3
+from contextlib import redirect_stdout
 
 import pytest
 
+from reconvene import _search
 from reconvene.search import SNIPPET_CLOSE, SNIPPET_OPEN, sanitize_query, search_sessions
 from tests.conftest import add_session, add_message
 
@@ -60,3 +63,24 @@ def test_search_missing_fts_table_raises_clear_error(tmp_path):
     conn.close()
     with pytest.raises(RuntimeError, match="messages_fts"):
         search_sessions(str(raw), "anything")
+
+
+def test_search_module_prints_tab_delimited_lines(ccrider_db):
+    add_session(ccrider_db, "s1", "/Users/x/Code/homelab", "2026-07-08 00:00:00", message_count=9)
+    add_message(ccrider_db, "s1", "user", "pihole dns setup", sequence=1)
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = _search.main(["pihole", str(ccrider_db)])
+    assert rc == 0
+    line = buf.getvalue().strip()
+    sid, display = line.split("\t", 1)
+    assert sid == "s1"
+    assert "homelab" in display and "1✓" in display
+    assert "«" not in display and "»" not in display  # markers stripped for terminal
+
+
+def test_search_module_empty_query_prints_nothing(ccrider_db):
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        _search.main(["", str(ccrider_db)])
+    assert buf.getvalue() == ""
