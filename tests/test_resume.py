@@ -34,7 +34,7 @@ def test_resume_prompt_format():
     prompt = resume_prompt(UPDATED_AT, NOW)
     assert prompt == (
         "Resuming session from 2026-07-15 10:00:00.\n\n"
-        "IMPORTANT: This session has been inactive for 6 minutes ago. Before proceeding: "
+        "IMPORTANT: This session was last active 6 minutes ago. Before proceeding: "
         "check git status, look around to understand what changed, "
         "and be careful not to overwrite any work in progress."
     )
