@@ -3,6 +3,22 @@
 Notable changes to Reconvene. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions use [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+- **Resume was impossible for topic and loose groups in the web UI.** Their Resume button
+  stayed disabled until a session row was clicked, but nothing marked the rows as choices
+  and the row hover state was painted the modal's own background color, so it produced no
+  visible change. Groups now preselect their latest session and keep the picker, the hover
+  and selected states are visible, and a "Pick a session to resume:" label marks the rows.
+  Root cause writeup: `docs/debugging/2026-08-10-resume-picker-root-cause.md`.
+- Grammar in the prompt injected on resume: `verbose_age()` already ends in "ago", so the
+  text read "inactive for 13 hours ago". Now "was last active 13 hours ago".
+
+### Changed
+- The web resume modal preselects a group's latest session, superseding the 0.2.0 behavior
+  below for the web. The TUI still requires an explicit pick for a multi-session group.
+
 ## [0.2.0] — 2026-07-20
 
 ### Added
