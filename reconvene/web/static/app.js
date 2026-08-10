@@ -14,17 +14,15 @@ function showError(message) {
 const fullRecaps = new Map(); // project name -> full recap text, populated only once actually fetched
 
 function showConfirmModal(project) {
-  // A loose/topic group aggregates unrelated sessions, so there's no sensible "latest" to preselect:
-  // require an explicit pick before Resume is enabled. A real project defaults to its latest session.
+  // Resume defaults to the latest session. A loose/topic group aggregates unrelated sessions, so
+  // its latest may not be the one wanted -- those always show the full picker to override it.
   const isGroup = project.kind === "loose" || project.kind === "topic";
   document.getElementById("modalProjectName").textContent = project.name;
   document.getElementById("modalFullRecap").textContent =
     fullRecaps.get(project.name) || "Loading full summary…";
   const modal = document.getElementById("confirmModal");
-  const confirmBtn = document.getElementById("modalConfirm");
   modal.dataset.projectName = project.name;
-  modal.dataset.sessionId = isGroup ? "" : project.latest_session_id;
-  confirmBtn.disabled = isGroup;
+  modal.dataset.sessionId = project.latest_session_id;
   const list = document.getElementById("modalSessions");
   list.innerHTML = "";
   fetch(`/api/sessions/${encodeURIComponent(project.name)}`)
@@ -32,6 +30,10 @@ function showConfirmModal(project) {
     .then((data) => {
       if (!data.sessions) return;
       if (!isGroup && data.sessions.length < 2) return; // one session, real project: nothing to pick
+      const hint = document.createElement("div");
+      hint.className = "session-hint";
+      hint.textContent = "Pick a session to resume:";
+      list.appendChild(hint);
       for (const s of data.sessions) {
         const row = document.createElement("div");
         row.className = "session-row";
@@ -39,7 +41,6 @@ function showConfirmModal(project) {
         row.textContent = `${s.relative} · ${s.message_count} msgs · ${s.first_msg}`;
         row.addEventListener("click", () => {
           modal.dataset.sessionId = s.session_id;
-          confirmBtn.disabled = false;
           list.querySelectorAll(".session-row.selected")
             .forEach((n) => n.classList.remove("selected"));
           row.classList.add("selected");
@@ -231,7 +232,6 @@ function showSessionModal(hit) {
   const modal = document.getElementById("confirmModal");
   modal.dataset.sessionId = hit.session_id;
   modal.dataset.projectName = hit.project;
-  document.getElementById("modalConfirm").disabled = false;    // a single session is always resumable
   document.getElementById("modalSessions").innerHTML = "";
   modal.classList.remove("hidden");
   // Fetch the per-session recap and fill it in below the snippet (guard against a stale response if

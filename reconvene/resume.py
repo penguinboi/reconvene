@@ -22,7 +22,7 @@ _LINUX_TERMINAL_PRIORITY = ("x-terminal-emulator", "gnome-terminal", "konsole",
 def resume_prompt(updated_at: str, now: datetime | None = None) -> str:
     return (
         f"Resuming session from {updated_at[:19]}.\n\n"
-        f"IMPORTANT: This session has been inactive for {verbose_age(updated_at, now)}. "
+        f"IMPORTANT: This session was last active {verbose_age(updated_at, now)}. "
         "Before proceeding: check git status, look around to understand what changed, "
         "and be careful not to overwrite any work in progress."
     )

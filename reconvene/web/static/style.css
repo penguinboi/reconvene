@@ -1,5 +1,5 @@
 /* ABOUTME: Color tokens, typography, and component styles for Reconvene's journal and settings pages. */
-/* ABOUTME: Terminal palette following system light/dark preference; no manual theme toggle. */
+/* ABOUTME: Terminal palette following system light/dark preference, overridable by the theme toggle. */
 :root {
   --bg: #ffffff;
   --card-bg: #f6f8fa;
@@ -326,6 +326,11 @@ table td, table th {
 }
 
 /* Session picker inside the resume modal */
+.session-hint {
+  margin: 12px 0 4px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
 .session-row {
   padding: 6px 8px;
   margin: 4px 0;
@@ -336,10 +341,12 @@ table td, table th {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.session-row:hover { background: var(--card-bg); }
+/* Both states must differ from --card-bg: the modal itself is painted --card-bg, so a row
+   tinted with it is invisible feedback -- no hover cue, and no way to see which is selected. */
+.session-row:hover { background: var(--bg); }
 .session-row.selected {
   border-color: var(--dot-active);
-  background: var(--card-bg);
+  background: var(--accent-glow);
 }
 
 /* Topic groups */
@@ -363,11 +370,6 @@ table td, table th {
   border-radius: 6px;
 }
 
-/* Resume disabled until a session is chosen (loose/topic groups) */
-#modalConfirm:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
 .recap-loading {
   margin-top: 8px;
   opacity: 0.6;

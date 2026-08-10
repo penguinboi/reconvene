@@ -273,9 +273,8 @@ def test_organize_button_clusters_loose_sessions(page, e2e_server, ccrider_db):
     page.get_by_text("Homelab Fixes").wait_for()
 
 
-def test_loose_group_requires_explicit_session_pick(page, e2e_server, ccrider_db):
+def _seed_loose_group(ccrider_db):
     # 3 projects under /Users/x/Code make it a root; 2 loose sessions launched from bare /Users/x/Code.
-    base_url, resumed, _, _ = e2e_server
     for sub in ("a", "b", "c"):
         add_session(ccrider_db, f"p{sub}", f"/Users/x/Code/{sub}", "2026-07-01 00:00:00", message_count=10)
         add_message(ccrider_db, f"p{sub}", "user", "work", sequence=1)
@@ -284,17 +283,72 @@ def test_loose_group_requires_explicit_session_pick(page, e2e_server, ccrider_db
     add_session(ccrider_db, "loose_old", "/Users/x/Code", "2026-07-02 00:00:00", message_count=30)
     add_message(ccrider_db, "loose_old", "user", "older loose", sequence=1)
 
+
+def _open_loose_group_modal(page, base_url, ccrider_db):
+    _seed_loose_group(ccrider_db)
     page.goto(base_url)
     page.get_by_text("loose sessions").click()
+    page.locator(".session-row").first.wait_for()
+
+
+def _background_of(page, selector):
+    return page.evaluate(
+        f"getComputedStyle(document.querySelector({selector!r})).backgroundColor"
+    )
+
+
+def test_loose_group_preselects_its_latest_session(page, e2e_server, ccrider_db):
+    base_url, resumed, _, _ = e2e_server
+    _open_loose_group_modal(page, base_url, ccrider_db)
+
     resume = page.locator("#modalConfirm")
-    # Resume is disabled until the user picks a session (no arbitrary "latest").
-    assert resume.is_disabled()
-    assert page.locator(".session-row.selected").count() == 0
-    page.locator(".session-row", has_text="older loose").click()
     assert not resume.is_disabled()
+    selected = page.locator(".session-row.selected")
+    assert selected.count() == 1
+    assert "newer loose" in selected.inner_text()
+
     resume.click()
     page.wait_for_timeout(300)
+    assert [r[0] for r in resumed] == ["loose_new"]
+
+
+def test_loose_group_lets_the_user_override_the_preselected_session(page, e2e_server, ccrider_db):
+    base_url, resumed, _, _ = e2e_server
+    _open_loose_group_modal(page, base_url, ccrider_db)
+
+    page.locator(".session-row", has_text="older loose").click()
+    assert page.locator(".session-row.selected").count() == 1  # selection moves, never accumulates
+    page.locator("#modalConfirm").click()
+    page.wait_for_timeout(300)
     assert [r[0] for r in resumed] == ["loose_old"]
+
+
+def test_session_picker_tells_the_user_the_rows_are_choices(page, e2e_server, ccrider_db):
+    # Without a label the rows read as metadata, so nobody discovers they can pick a different one.
+    base_url, _, _, _ = e2e_server
+    _open_loose_group_modal(page, base_url, ccrider_db)
+
+    assert "Pick a session" in page.locator(".session-hint").inner_text()
+
+
+def test_selected_session_row_is_visible_against_the_modal(page, e2e_server, ccrider_db):
+    # A preselected session the user cannot see is worse than none -- they would resume blind.
+    # The selected background must differ from the modal's own, not just carry a 1px border.
+    base_url, _, _, _ = e2e_server
+    _open_loose_group_modal(page, base_url, ccrider_db)
+
+    assert _background_of(page, ".session-row.selected") != _background_of(page, ".modal-content")
+
+
+def test_hovering_a_session_row_is_visible_against_the_modal(page, e2e_server, ccrider_db):
+    # Hover is the only cue that these rows are clickable. Painting them the modal's own
+    # background makes that cue a no-op, which is how the picker went unnoticed.
+    base_url, _, _, _ = e2e_server
+    _open_loose_group_modal(page, base_url, ccrider_db)
+
+    row = page.locator(".session-row", has_text="older loose")  # unselected, so hover is the only change
+    row.hover()
+    assert _background_of(page, ".session-row:hover") != _background_of(page, ".modal-content")
 
 
 def test_search_result_modal_shows_session_recap(page, e2e_server, ccrider_db):
