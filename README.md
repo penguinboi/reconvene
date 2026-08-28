@@ -96,4 +96,3 @@ See `THIRD_PARTY_LICENSES.md` for third-party software this project depends on.
 ---
 
 🐧 A [Penguinboi Software](https://penguinboisoftware.com) tool. Made with ❤️ and 🧠.
-
