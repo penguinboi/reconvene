@@ -15,7 +15,7 @@ from reconvene.journal import (
 
 
 def S(sid, path, updated, message_count=10):
-    return Session(sid, path, updated, updated, message_count, None, None)
+    return Session(sid, path, updated, updated, message_count, None, None, "claude", "")
 
 
 def test_build_journal_groups_ranks_and_splits():
@@ -286,7 +286,7 @@ def test_verbose_age_handles_real_ccrider_timestamp_format():
 
 
 def _sess(sid, path, updated, count=10):
-    return Session(sid, path, updated, updated, count, None, None)
+    return Session(sid, path, updated, updated, count, None, None, "claude", "")
 
 
 def test_loose_sessions_group_under_fallback_without_topics():

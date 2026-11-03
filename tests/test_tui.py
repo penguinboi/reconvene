@@ -8,7 +8,7 @@ from tests.conftest import add_session, add_message
 
 
 def _p(name, cat, sid, path, updated, count=1):
-    return Project(name, cat, [Session(sid, path, updated, updated, 5, None, None) for _ in range(count)])
+    return Project(name, cat, [Session(sid, path, updated, updated, 5, None, None, "claude", "") for _ in range(count)])
 
 
 def test_render_line_format():

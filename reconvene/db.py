@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 REQUIRED_SESSION_COLS = {
     "session_id", "project_path", "summary", "llm_summary",
-    "created_at", "updated_at", "message_count",
+    "created_at", "updated_at", "message_count", "provider", "resume_via",
 }
 
 
@@ -18,6 +18,8 @@ class Session:
     message_count: int
     llm_summary: str | None
     summary: str | None
+    provider: str
+    resume_via: str
 
 
 def _connect(db_path):
@@ -36,36 +38,55 @@ def probe_schema(conn):
         )
 
 
+_SESSION_SELECT = (
+    "SELECT session_id, project_path, summary, llm_summary, created_at, updated_at, "
+    "message_count, provider, resume_via FROM sessions"
+)
+
+
+def _session_from_row(r) -> Session:
+    return Session(
+        r["session_id"], r["project_path"], r["updated_at"], r["created_at"],
+        r["message_count"] or 0, r["llm_summary"], r["summary"],
+        r["provider"] or "claude", r["resume_via"] or "",
+    )
+
+
 def load_sessions(db_path) -> list[Session]:
     conn = _connect(db_path)
     try:
         probe_schema(conn)
-        rows = conn.execute(
-            "SELECT session_id, project_path, summary, llm_summary, created_at, updated_at, message_count FROM sessions"
-        ).fetchall()
+        rows = conn.execute(_SESSION_SELECT + " WHERE COALESCE(resume_via, '') = ''").fetchall()
     finally:
         conn.close()
-    return [
-        Session(
-            r["session_id"], r["project_path"], r["updated_at"], r["created_at"],
-            r["message_count"] or 0, r["llm_summary"], r["summary"],
-        )
-        for r in rows
-    ]
+    return [_session_from_row(r) for r in rows]
 
 
-def session_messages(db_path, session_id, limit=40) -> list[tuple[str, str]]:
+def find_session(db_path, session_id) -> Session | None:
+    conn = _connect(db_path)
+    try:
+        probe_schema(conn)
+        row = conn.execute(_SESSION_SELECT + " WHERE session_id = ?", (session_id,)).fetchone()
+    finally:
+        conn.close()
+    return _session_from_row(row) if row else None
+
+
+def session_messages(db_path, session_id, limit=40, newest=False) -> list[tuple[str, str]]:
+    order = "DESC" if newest else "ASC"
     conn = _connect(db_path)
     try:
         rows = conn.execute(
             "SELECT type, COALESCE(NULLIF(text_content,''), content) AS body "
             "FROM messages WHERE session_id = (SELECT id FROM sessions WHERE session_id=?) "
             "AND (is_sidechain IS NULL OR is_sidechain=0) "
-            "ORDER BY sequence LIMIT ?",
+            f"ORDER BY sequence {order} LIMIT ?",
             (session_id, limit),
         ).fetchall()
     finally:
         conn.close()
+    if newest:
+        rows.reverse()
     out = []
     for r in rows:
         body = (r["body"] or "").strip()

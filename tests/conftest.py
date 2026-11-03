@@ -14,7 +14,7 @@ def ccrider_db(tmp_path):
           id INTEGER PRIMARY KEY AUTOINCREMENT,
           session_id TEXT, project_path TEXT, cwd TEXT, summary TEXT, llm_summary TEXT,
           created_at DATETIME, updated_at DATETIME, message_count INTEGER,
-          git_branch TEXT, provider TEXT
+          git_branch TEXT, provider TEXT, resume_via TEXT
         );
         CREATE TABLE messages (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,12 +37,13 @@ def ccrider_db(tmp_path):
 
 def add_session(db, session_id, project_path, updated_at,
                 created_at="2026-01-01 00:00:00", message_count=10,
-                llm_summary=None, summary=None):
+                llm_summary=None, summary=None, provider="claude", resume_via=""):
     conn = sqlite3.connect(db)
     conn.execute(
-        "INSERT INTO sessions(session_id,project_path,cwd,summary,llm_summary,created_at,updated_at,message_count)"
-        " VALUES(?,?,?,?,?,?,?,?)",
-        (session_id, project_path, project_path, summary, llm_summary, created_at, updated_at, message_count),
+        "INSERT INTO sessions(session_id,project_path,cwd,summary,llm_summary,created_at,updated_at,message_count,provider,resume_via)"
+        " VALUES(?,?,?,?,?,?,?,?,?,?)",
+        (session_id, project_path, project_path, summary, llm_summary, created_at, updated_at, message_count,
+         provider, resume_via),
     )
     conn.commit()
     conn.close()
