@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from ..classify import canonical_name
 from ..cluster import TopicAuthError, TopicCache, load_topic_lookup, organize, unassigned_loose_sessions
 from ..config import save_config
-from ..db import load_sessions
+from ..db import find_session, load_sessions
 from ..journal import abbreviate_home, build_journal, build_settings_projects, recency_bucket, relative_time
 from ..recap import RecapCache, ensure_recaps, ensure_session_recap, excerpt, first_user_message
 from ..search import search_sessions
@@ -215,15 +215,12 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             body = self.rfile.read(length) if length else b"{}"
             if path.startswith("/api/resume/"):
                 session_id = path[len("/api/resume/"):]
-                match = next(
-                    (s for s in load_sessions(db_path) if s.session_id == session_id),
-                    None,
-                )
+                match = find_session(db_path, session_id)
                 if match is None:
                     self._send_json(404, {"error": f"no session {session_id!r}"})
                     return
                 try:
-                    resumer(session_id, match.project_path, match.updated_at)
+                    resumer(match)
                 except Exception as e:
                     self._send_json(500, {"error": str(e)})
                     return

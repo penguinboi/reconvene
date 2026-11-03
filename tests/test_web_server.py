@@ -18,8 +18,8 @@ def running_server(tmp_path, ccrider_db):
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
     resumed = []
-    def fake_resumer(session_id, cwd, updated_at):
-        resumed.append((session_id, cwd, updated_at))
+    def fake_resumer(session):
+        resumed.append((session.session_id, session.project_path, session.updated_at))
     def fake_recap_runner(prompt):
         if "organizing loose" in prompt:
             return "\n".join(f"{sid}: Homelab Fixes"
@@ -88,7 +88,7 @@ def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
     add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
-    def failing_resumer(session_id, cwd, updated_at):
+    def failing_resumer(session):
         raise RuntimeError("osascript not found")
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
@@ -640,3 +640,13 @@ def test_api_session_recap_unknown_sid_404(running_server):
     with pytest.raises(HTTPError) as exc:
         urllib.request.urlopen(f"{base_url}/api/session-recap/nope")
     assert exc.value.code == 404
+
+
+def test_resume_route_finds_subagent_row(running_server, ccrider_db):
+    # load_sessions hides Codex sub-agent rows, but a search hit on one must still resume.
+    base_url, resumed, _ = running_server
+    add_session(ccrider_db, "sub1", "/Users/x/Code/myproject", "2026-07-09 00:00:00",
+                provider="codex", resume_via="parent-uuid")
+    req = urllib.request.Request(f"{base_url}/api/resume/sub1", method="POST", data=b"")
+    assert json.loads(urllib.request.urlopen(req).read())["status"] == "resumed"
+    assert resumed == [("sub1", "/Users/x/Code/myproject", "2026-07-09 00:00:00")]

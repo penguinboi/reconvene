@@ -171,7 +171,7 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
         session = all_by_sid.get(sid)
         if session is None:
             return None
-        resumer(session.session_id, session.project_path, session.updated_at, config)
+        resumer(session, config)
         return 0
 
     if initial_search is not None:
@@ -207,8 +207,7 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
             session = next((s for s in project.sessions if s.session_id == sid), None)
             if session is None:
                 continue
-            resumer(session.session_id, session.project_path, session.updated_at, config)
+            resumer(session, config)
             return 0
-        resumer(project.latest.session_id, project.latest.project_path,
-                project.latest.updated_at, config)
+        resumer(project.latest, config)
         return 0
