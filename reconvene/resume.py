@@ -1,4 +1,4 @@
-# ABOUTME: Builds the argv that hands a chosen session back to Claude Code to resume.
+# ABOUTME: Builds the argv that hands a chosen session back to the agent that created it to resume.
 # ABOUTME: open_terminal_and_resume opens a new terminal window (macOS Terminal/iTerm2 or a Linux
 # ABOUTME: emulator) — no execvp, since the web-server caller must keep running for other requests.
 import os
@@ -8,6 +8,7 @@ import shutil
 import subprocess
 from datetime import datetime
 
+from .agents import extra_args_for, get_agent, resume_argv
 from .journal import verbose_age
 
 # terminal_app values that name macOS apps — on Linux they mean "not configured", so we autodetect.
@@ -28,13 +29,8 @@ def resume_prompt(updated_at: str, now: datetime | None = None) -> str:
     )
 
 
-def resume_command(session_id: str, updated_at: str, extra_args: str = "",
-                    now: datetime | None = None) -> list[str]:
-    cmd = ["claude", "--resume", session_id]
-    if extra_args:
-        cmd.extend(shlex.split(extra_args))
-    cmd.append(resume_prompt(updated_at, now))
-    return cmd
+def resume_command(session, extra: list[str] = (), now: datetime | None = None) -> list[str]:
+    return resume_argv(session, resume_prompt(session.updated_at, now), list(extra))
 
 
 def _applescript_escape(s: str) -> str:
@@ -75,7 +71,7 @@ def _iterm2_script(shell_command: str) -> str:
 
 def _linux_terminal_argv(binary: str, shell_command: str) -> list[str]:
     # Run the resume command in a login shell, then `exec bash` so the window stays open after
-    # Claude exits (matching macOS Terminal, which keeps the window). gnome-terminal takes the
+    # the agent exits (matching macOS Terminal, which keeps the window). gnome-terminal takes the
     # command after `--`; kitty takes it directly; everything else uses the classic `-e`.
     persist = f"{shell_command}; exec bash"
     if binary == "gnome-terminal":
@@ -103,16 +99,13 @@ def _linux_resume(shell_command: str, config, runner, which, env) -> None:
     )
 
 
-def open_terminal_and_resume(session_id: str, cwd: str, updated_at: str, config=None,
-                              runner=subprocess.run, now: datetime | None = None,
-                              path_exists=os.path.isdir, system=None,
-                              which=shutil.which, env=None) -> None:
+def launch_in_terminal(argv: list[str], cwd: str, config=None,
+                       runner=subprocess.run, path_exists=os.path.isdir, system=None,
+                       which=shutil.which, env=None) -> None:
     if not path_exists(cwd):
-        # `cd <cwd> && claude` would silently no-op if the directory is gone (the launcher still
+        # `cd <cwd> && <agent>` would silently no-op if the directory is gone (the launcher still
         # exits 0), so the caller would falsely believe the session resumed. Fail loudly instead.
         raise FileNotFoundError(f"project directory no longer exists: {cwd}")
-    extra_args = config.claude_extra_args if config else ""
-    argv = resume_command(session_id, updated_at, extra_args, now)
     command = " ".join(shlex.quote(part) for part in argv)
     shell_command = f"cd {shlex.quote(cwd)} && {command}"
     system = system or platform.system()
@@ -128,14 +121,20 @@ def open_terminal_and_resume(session_id: str, cwd: str, updated_at: str, config=
         )
 
 
-def exec_resume(session_id: str, cwd: str, updated_at: str, config=None,
+def open_terminal_and_resume(session, config=None, now: datetime | None = None,
+                             **launch_kwargs) -> None:
+    argv = resume_command(session, extra_args_for(session.provider, config), now)
+    launch_in_terminal(argv, session.project_path, config, **launch_kwargs)
+
+
+def exec_resume(session, config=None,
                 path_exists=os.path.isdir, chdir=os.chdir, execvp=os.execvp) -> None:
-    # Foreground handoff for the TUI: replace this process with `claude --resume` in the
+    # Foreground handoff for the TUI: replace this process with the session's agent in the
     # project's directory. Unlike open_terminal_and_resume (which must spawn a window because the
     # web server keeps running), the TUI is a foreground process, so execvp gives the terminal
-    # straight to Claude. Reuses resume_command so the injected resume-context prompt is identical.
-    if not path_exists(cwd):
-        raise FileNotFoundError(f"project directory no longer exists: {cwd}")
-    extra_args = config.claude_extra_args if config else ""
-    chdir(cwd)
-    execvp("claude", resume_command(session_id, updated_at, extra_args))
+    # straight to the agent. Uses resume_command, the same argv the web path launches.
+    if not path_exists(session.project_path):
+        raise FileNotFoundError(f"project directory no longer exists: {session.project_path}")
+    argv = resume_command(session, extra_args_for(session.provider, config))
+    chdir(session.project_path)
+    execvp(get_agent(session.provider).binary, argv)

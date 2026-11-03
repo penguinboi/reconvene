@@ -39,3 +39,17 @@ def test_save_creates_parent_directory(tmp_path):
     save_config(Config(), path)
     assert path.exists()
     assert json.loads(path.read_text())["recap_auth_mode"] == "claude_cli"
+
+
+def test_config_round_trips_agent_extra_args(tmp_path):
+    path = tmp_path / "config.json"
+    save_config(Config(codex_extra_args="--full-auto", antigravity_extra_args="--yolo"), path)
+    loaded = load_config(path)
+    assert loaded.codex_extra_args == "--full-auto"
+    assert loaded.antigravity_extra_args == "--yolo"
+
+
+def test_config_without_agent_extra_args_keys_defaults_to_empty():
+    config = Config.from_dict({"terminal_app": "iTerm2"})
+    assert config.codex_extra_args == ""
+    assert config.antigravity_extra_args == ""

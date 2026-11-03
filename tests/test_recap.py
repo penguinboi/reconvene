@@ -12,7 +12,7 @@ def _project(db, name):
     from tests.conftest import add_session, add_message
     add_session(db, "s1", f"/Users/x/Code/{name}", "2026-07-08 10:00:00", message_count=5)
     add_message(db, "s1", "user", "do the thing", sequence=1)
-    return Project(name, "real", [Session("s1", f"/Users/x/Code/{name}", "2026-07-08 10:00:00", "x", 5, None, None)])
+    return Project(name, "real", [Session("s1", f"/Users/x/Code/{name}", "2026-07-08 10:00:00", "x", 5, None, None, "claude", "")])
 
 
 def test_build_prompt_asks_for_multi_paragraph_detail(ccrider_db):
@@ -28,7 +28,7 @@ def test_build_prompt_default_char_budget_covers_a_long_session(ccrider_db):
     long_body = "x" * 5000  # longer than the old 2000-char-per-session budget
     add_message(ccrider_db, "s2", "user", long_body, sequence=1)
     p = Project("myproject", "real", [
-        Session("s2", "/Users/x/Code/myproject", "2026-07-09 10:00:00", "x", 1, None, None),
+        Session("s2", "/Users/x/Code/myproject", "2026-07-09 10:00:00", "x", 1, None, None, "claude", ""),
     ])
     prompt = build_prompt(p, ccrider_db)
     assert long_body in prompt
@@ -175,7 +175,7 @@ def test_claude_runner_strips_inherited_api_key_in_cli_mode(monkeypatch):
 
 
 def _session(sid="s1", path="/Users/x/Code/myproject", updated="2026-07-08 10:00:00", count=12):
-    return Session(sid, path, updated, updated, count, None, None)
+    return Session(sid, path, updated, updated, count, None, None, "claude", "")
 
 
 def test_ensure_session_recap_generates_via_runner_and_caches(tmp_path, ccrider_db):
@@ -234,3 +234,16 @@ def test_build_session_prompt_includes_transcript(ccrider_db):
     prompt = build_session_prompt(_session(), str(ccrider_db))
     assert "summarize the raid migration" in prompt
     assert "ONELINE:" in prompt and "DETAIL:" in prompt
+
+
+def test_claude_env_subscription_drops_key(monkeypatch):
+    from reconvene.recap import claude_env
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-inherited")
+    assert "ANTHROPIC_API_KEY" not in claude_env(Config())
+
+
+def test_claude_env_api_key_mode_sets_key(monkeypatch):
+    from reconvene.recap import claude_env
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-inherited")
+    env = claude_env(Config(recap_auth_mode="api_key", api_key="sk-test"))
+    assert env["ANTHROPIC_API_KEY"] == "sk-test"

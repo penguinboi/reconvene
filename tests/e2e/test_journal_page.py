@@ -380,3 +380,266 @@ def test_page_has_penguinboi_brand(page, e2e_server, ccrider_db):
     # Favicon is actually served
     resp = page.request.get(f"{base_url}/favicon.png")
     assert resp.status == 200
+
+
+# --- agent badges, "Open in" switch, handoff -----------------------------------------------
+
+def _seed_mixed_agents(ccrider_db):
+    add_session(ccrider_db, "claude_old", "/Users/x/Code/mixed", "2026-07-08 00:00:00",
+                message_count=4, provider="claude")
+    add_message(ccrider_db, "claude_old", "user", "older claude work", sequence=1)
+    add_session(ccrider_db, "codex_new", "/Users/x/Code/mixed", "2026-07-09 00:00:00",
+                message_count=4, provider="codex")
+    add_message(ccrider_db, "codex_new", "user", "newer codex work", sequence=1)
+
+
+def _open_mixed_modal(page, base_url, ccrider_db):
+    _seed_mixed_agents(ccrider_db)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator(".session-row").first.wait_for()
+
+
+def test_session_rows_show_agent_badges(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    assert page.locator(".session-row", has_text="newer codex").locator(".agent-badge.agent-codex").count() == 1
+    assert page.locator(".agent-badge.agent-codex").inner_text() == "Codex"
+    assert page.locator(".agent-badge.agent-claude").inner_text() == "Claude"
+    assert page.locator(".session-row", has_text="older claude").locator(".agent-badge.agent-claude").count() == 1
+
+
+def test_open_in_switch_follows_selected_session(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Codex"
+    assert page.locator('#modalAgentSwitch button[data-agent="codex"]').get_attribute("class") == "selected"
+    page.locator(".session-row", has_text="older claude").click()
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Claude"
+    assert page.locator('#modalAgentSwitch button.selected').get_attribute("data-agent") == "claude"
+
+
+def test_open_in_switch_shows_for_single_session_project(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "solo", "/Users/x/Code/solo", "2026-07-09 00:00:00", provider="codex")
+    add_message(ccrider_db, "solo", "user", "only one", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+
+    page.locator("#modalAgentSwitch button").first.wait_for()
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Codex"
+    assert page.locator("#modalAgentSwitch button").count() == 3
+
+
+def test_switching_agent_changes_button_to_hand_off(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    page.locator('#modalAgentSwitch button[data-agent="codex"]').click()
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Codex"
+
+
+def test_uninstalled_agent_is_disabled(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    assert page.locator('#modalAgentSwitch button[data-agent="antigravity"]').is_disabled()
+    assert not page.locator('#modalAgentSwitch button[data-agent="claude"]').is_disabled()
+
+
+def test_hand_off_posts_target_agent(page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert handoffs == [("codex_new", "claude")]
+    assert resumed == []
+
+
+def test_native_resume_still_closes_modal_and_resumes(page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator("#modalConfirm").click()
+    page.wait_for_timeout(300)
+    assert resumed == ["codex_new"]
+    assert handoffs == []
+
+
+def test_handoff_button_disabled_while_working(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, handoffs, hold = e2e_server_with_handoff
+    hold["release"] = threading.Event()
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    button = page.locator("#modalConfirm")
+    button.click()
+    page.locator("#modalConfirm", has_text="Summarizing with Claude…").wait_for()
+    assert button.is_disabled()
+    assert page.locator("#confirmModal.hidden").count() == 0  # modal stays open during the handoff
+    button.click(force=True)
+    page.wait_for_timeout(200)
+    assert len(handoffs) == 1
+
+    hold["release"].set()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert len(handoffs) == 1
+
+
+def test_handoff_error_shows_in_modal_and_reenables(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, handoffs, hold = e2e_server_with_handoff
+    hold["error"] = "summary failed"
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#modalError")
+    error.wait_for(state="visible")
+    assert "summary failed" in error.inner_text()
+    assert page.locator("#confirmModal.hidden").count() == 0
+    assert not page.locator("#modalConfirm").is_disabled()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+
+
+def test_selected_agent_button_is_visible_against_switch(page, e2e_server_with_handoff, ccrider_db):
+    # Guards the token-collision class in CLAUDE.md: the selected button must not share a
+    # background with its container or with an unselected sibling.
+    base_url, _, _, _ = e2e_server_with_handoff
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    selected = _background_of(page, "#modalAgentSwitch button.selected")
+    assert selected != _background_of(page, "#modalAgentSwitch")
+    assert selected != _background_of(page, "#modalAgentSwitch button:not(.selected):not(:disabled)")
+
+
+def test_handoff_in_flight_locks_switch_and_rows(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, handoffs, hold = e2e_server_with_handoff
+    hold["release"] = threading.Event()
+    hold["error"] = "summary failed"
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    page.locator("#modalConfirm").click()
+    page.locator("#modalConfirm", has_text="Summarizing with Claude…").wait_for()
+
+    page.locator('#modalAgentSwitch button[data-agent="codex"]').click(force=True)
+    page.locator(".session-row", has_text="older claude").click()
+    assert page.locator("#modalConfirm").inner_text() == "Summarizing with Claude…"
+    assert page.evaluate("document.getElementById('confirmModal').dataset.agent") == "claude"
+    assert "newer codex" in page.locator(".session-row.selected").inner_text()
+
+    hold["release"].set()
+    page.locator("#modalError").wait_for(state="visible")
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    assert page.locator('#modalAgentSwitch button.selected').get_attribute("data-agent") == "claude"
+    assert not page.locator('#modalAgentSwitch button[data-agent="codex"]').is_disabled()
+
+
+def test_handoff_non_json_failure_shows_error_and_reenables(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/resume/*", lambda route: route.fulfill(
+        status=500, content_type="text/html", body="<html>proxy exploded</html>"))
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#modalError")
+    error.wait_for(state="visible")
+    assert error.inner_text().strip() != ""
+    assert not page.locator("#modalConfirm").is_disabled()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+
+
+def test_agents_fetch_failure_is_shown(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/agents", lambda route: route.abort())
+    _seed_mixed_agents(ccrider_db)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#error").wait_for(state="visible")
+    assert "agent list" in page.locator("#error").inner_text().lower()
+
+
+def test_agents_fetch_is_retried_after_a_failure(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/agents", lambda route: route.abort())
+    _seed_mixed_agents(ccrider_db)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#error").wait_for(state="visible")
+    page.unroute("**/api/agents")
+    page.locator("#modalCancel").click()
+    page.locator(".project").click()
+    page.locator('#modalAgentSwitch button[data-agent="codex"]').wait_for()
+
+
+def test_cancel_is_disabled_while_handoff_is_in_flight(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, handoffs, hold = e2e_server_with_handoff
+    hold["release"] = threading.Event()
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    page.locator("#modalConfirm").click()
+    page.locator("#modalConfirm", has_text="Summarizing with Claude…").wait_for()
+    cancel = page.locator("#modalCancel")
+    assert cancel.is_disabled()
+    cancel.click(force=True)
+    page.wait_for_timeout(200)
+    assert page.locator("#confirmModal.hidden").count() == 0
+    assert len(handoffs) == 1
+
+    hold["release"].set()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    page.locator(".project").click()
+    assert not page.locator("#modalCancel").is_disabled()
+    page.locator("#modalCancel").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+
+
+def test_native_resume_non_json_failure_is_shown(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/resume/*", lambda route: route.fulfill(
+        status=502, content_type="text/html", body="<html>proxy exploded</html>"))
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#error")
+    error.wait_for(state="visible")
+    assert "Couldn't resume" in error.inner_text()
+    assert "undefined" not in error.inner_text()
+
+
+def test_native_resume_error_without_message_shows_http_status(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/resume/*", lambda route: route.fulfill(
+        status=500, content_type="application/json", body="{}"))
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#error")
+    error.wait_for(state="visible")
+    assert "500" in error.inner_text()
+    assert "undefined" not in error.inner_text()
+
+
+def test_native_resume_network_failure_is_shown(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/resume/*", lambda route: route.abort())
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#error")
+    error.wait_for(state="visible")
+    assert "Couldn't resume" in error.inner_text()

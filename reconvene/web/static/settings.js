@@ -36,6 +36,8 @@ async function loadSettings() {
   document.getElementById("hiddenPathSubstrings").value = data.config.hidden_path_substrings.join("\n");
   document.getElementById("terminalApp").value = data.config.terminal_app;
   document.getElementById("claudeExtraArgs").value = data.config.claude_extra_args || "";
+  document.getElementById("codexExtraArgs").value = data.config.codex_extra_args || "";
+  document.getElementById("antigravityExtraArgs").value = data.config.antigravity_extra_args || "";
 }
 
 document.getElementById("save").addEventListener("click", async () => {
@@ -61,6 +63,8 @@ document.getElementById("save").addEventListener("click", async () => {
       api_key: document.getElementById("apiKey").value || null,
       terminal_app: document.getElementById("terminalApp").value,
       claude_extra_args: document.getElementById("claudeExtraArgs").value,
+      codex_extra_args: document.getElementById("codexExtraArgs").value,
+      antigravity_extra_args: document.getElementById("antigravityExtraArgs").value,
     }),
   });
 });

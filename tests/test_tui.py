@@ -8,7 +8,7 @@ from tests.conftest import add_session, add_message
 
 
 def _p(name, cat, sid, path, updated, count=1):
-    return Project(name, cat, [Session(sid, path, updated, updated, 5, None, None) for _ in range(count)])
+    return Project(name, cat, [Session(sid, path, updated, updated, 5, None, None, "claude", "") for _ in range(count)])
 
 
 def test_render_line_format():
@@ -42,7 +42,7 @@ def test_run_tui_resumes_selected(tmp_path, ccrider_db):
     rc = tui.run_tui(
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         picker=lambda lines: ("", lines[0]),  # pick the first entry ("s1\t...")
-        resumer=lambda sid, cwd, updated_at, config: resumed.append((sid, cwd, updated_at)),
+        resumer=lambda s, config: resumed.append((s.session_id, s.project_path, s.updated_at)),
     )
     assert rc == 0
     assert resumed == [("s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00")]
@@ -185,7 +185,7 @@ def test_run_tui_ctrl_s_drills_into_sessions_and_resumes_picked(tmp_path, ccride
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         picker=lambda lines: ("ctrl-s", lines[0]),          # drill into the (only) project
         session_picker=lambda lines: ("", next(l for l in lines if l.startswith("old\t"))),
-        resumer=lambda sid, cwd, updated_at, config: resumed.append((sid, cwd)),
+        resumer=lambda s, config: resumed.append((s.session_id, s.project_path)),
     )
     assert rc == 0
     assert resumed == [("old", "/Users/x/Code/myproject")]
@@ -240,7 +240,7 @@ def test_run_tui_ctrl_f_search_resumes_hit(tmp_path, ccrider_db):
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         picker=lambda lines: ("ctrl-f", None),
         search_picker=lambda query: "hit\thomelab · 12d ago · 1✓ · …",
-        resumer=lambda sid, cwd, updated_at, config: resumed.append((sid, cwd)),
+        resumer=lambda s, config: resumed.append((s.session_id, s.project_path)),
     )
     assert rc == 0
     assert resumed == [("hit", "/Users/x/Code/homelab")]
@@ -270,7 +270,7 @@ def test_run_tui_initial_search_skips_project_view(tmp_path, ccrider_db):
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         picker=lambda lines: (_ for _ in ()).throw(AssertionError("project picker must not run")),
         search_picker=lambda query: queries.append(query) or "hit\thomelab · 12d ago · 1✓ · …",
-        resumer=lambda sid, cwd, updated_at, config: resumed.append(sid),
+        resumer=lambda s, config: resumed.append(s.session_id),
         initial_search="pihole",
     )
     assert rc == 0
@@ -311,7 +311,7 @@ def test_run_tui_enter_on_loose_group_drills_into_sessions(tmp_path, ccrider_db)
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         picker=lambda lines: ("", next(l for l in lines if "loose sessions" in l)),          # Enter on the loose group
         session_picker=lambda lines: ("", next(l for l in lines if l.startswith("loose_old\t"))),  # pick the older one
-        resumer=lambda sid, cwd, updated, config: resumed.append(sid),
+        resumer=lambda s, config: resumed.append(s.session_id),
     )
     assert rc == 0
     assert resumed == ["loose_old"]  # drilled in and picked, NOT resume-latest (loose_new)
@@ -330,7 +330,7 @@ def test_run_tui_enter_on_single_session_loose_group_resumes_directly(tmp_path, 
         Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
         picker=lambda lines: ("", next(l for l in lines if "loose sessions" in l)),
         session_picker=lambda lines: session_picker_calls.append(lines) or ("", None),
-        resumer=lambda sid, cwd, updated, config: resumed.append(sid),
+        resumer=lambda s, config: resumed.append(s.session_id),
     )
     assert rc == 0
     assert resumed == ["solo"]              # resumed directly

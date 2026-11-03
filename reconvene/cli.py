@@ -9,6 +9,7 @@ import webbrowser
 
 from .config import load_config
 from .constants import CCRIDER_DB, CONFIG_PATH, RECAP_CACHE_DB, VERSION
+from .handoff import perform_handoff
 from .resume import open_terminal_and_resume
 from .tui import run_tui
 from .web.server import serve
@@ -50,8 +51,9 @@ def _serve_web(config, db, cache, config_path) -> int:
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1
-    resumer = lambda session_id, cwd, updated_at: open_terminal_and_resume(session_id, cwd, updated_at, config)
-    server = serve(config, db, cache, config_path, resumer, port=port)
+    resumer = lambda session: open_terminal_and_resume(session, config)
+    handoff = lambda session, target: perform_handoff(session, target, config, db)
+    server = serve(config, db, cache, config_path, resumer, handoff=handoff, port=port)
     url = f"http://127.0.0.1:{port}"
     print(f"Reconvene running at {url}")
     threading.Thread(target=webbrowser.open, args=(url,), daemon=True).start()

@@ -18,8 +18,8 @@ def running_server(tmp_path, ccrider_db):
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
     resumed = []
-    def fake_resumer(session_id, cwd, updated_at):
-        resumed.append((session_id, cwd, updated_at))
+    def fake_resumer(session):
+        resumed.append((session.session_id, session.project_path, session.updated_at))
     def fake_recap_runner(prompt):
         if "organizing loose" in prompt:
             return "\n".join(f"{sid}: Homelab Fixes"
@@ -88,7 +88,7 @@ def test_resume_resumer_failure_returns_500(tmp_path, ccrider_db):
     add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
     add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
     config = Config()
-    def failing_resumer(session_id, cwd, updated_at):
+    def failing_resumer(session):
         raise RuntimeError("osascript not found")
     fake_recap_runner = lambda prompt: "ONELINE: test recap\nDETAIL: test"
     server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
@@ -640,3 +640,141 @@ def test_api_session_recap_unknown_sid_404(running_server):
     with pytest.raises(HTTPError) as exc:
         urllib.request.urlopen(f"{base_url}/api/session-recap/nope")
     assert exc.value.code == 404
+
+
+def test_resume_route_finds_subagent_row(running_server, ccrider_db):
+    # load_sessions hides Codex sub-agent rows, but a search hit on one must still resume.
+    base_url, resumed, _ = running_server
+    add_session(ccrider_db, "sub1", "/Users/x/Code/myproject", "2026-07-09 00:00:00",
+                provider="codex", resume_via="parent-uuid")
+    req = urllib.request.Request(f"{base_url}/api/resume/sub1", method="POST", data=b"")
+    assert json.loads(urllib.request.urlopen(req).read())["status"] == "resumed"
+    assert resumed == [("sub1", "/Users/x/Code/myproject", "2026-07-09 00:00:00")]
+
+
+@pytest.fixture
+def agent_server(tmp_path, ccrider_db):
+    """A server whose resumer, handoff and `which` are recording fakes."""
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    config = Config()
+    config_path = tmp_path / "config.json"
+    resumed, handed_off = [], []
+    state = {"handoff_error": None}
+
+    def fake_handoff(session, target):
+        if state["handoff_error"]:
+            raise RuntimeError(state["handoff_error"])
+        handed_off.append((session.session_id, session.provider, target))
+
+    fake_which = lambda binary: "/usr/bin/" + binary if binary in ("claude", "codex") else None
+    server = serve(config, str(ccrider_db), str(tmp_path / "recaps.db"), str(config_path),
+                   lambda s: resumed.append(s.session_id),
+                   recap_runner=lambda prompt: "ONELINE: x\nDETAIL: x",
+                   handoff=fake_handoff, which=fake_which, port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    yield base_url, resumed, handed_off, state, config, config_path
+    server.shutdown()
+    server.server_close()
+
+
+def _post_json(url, payload=None):
+    data = None if payload is None else json.dumps(payload).encode()
+    req = urllib.request.Request(url, method="POST", data=data, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as resp:
+        return resp.status, json.loads(resp.read())
+
+
+def test_sessions_rows_include_provider(agent_server, ccrider_db):
+    base_url, *_ = agent_server
+    add_session(ccrider_db, "cx1", "/Users/x/Code/myproject", "2026-07-09 00:00:00", message_count=20,
+                provider="codex")
+    add_message(ccrider_db, "cx1", "user", "codex thread", sequence=1)
+    with urllib.request.urlopen(f"{base_url}/api/sessions/myproject") as resp:
+        rows = {s["session_id"]: s for s in json.loads(resp.read())["sessions"]}
+    assert rows["cx1"]["provider"] == "codex"
+    assert rows["r1"]["provider"] == "claude"
+    assert rows["cx1"]["agent_label"] == "Codex"
+    assert rows["r1"]["agent_label"] == "Claude"
+
+
+def test_agents_endpoint_reports_installed(agent_server):
+    base_url, *_ = agent_server
+    with urllib.request.urlopen(f"{base_url}/api/agents") as resp:
+        data = json.loads(resp.read())
+    assert data == {"agents": [
+        {"name": "claude", "label": "Claude", "installed": True},
+        {"name": "codex", "label": "Codex", "installed": True},
+        {"name": "antigravity", "label": "Antigravity", "installed": False},
+    ]}
+
+
+def test_resume_without_agent_resumes_natively(agent_server):
+    base_url, resumed, handed_off, *_ = agent_server
+    assert _post_json(f"{base_url}/api/resume/r1") == (200, {"status": "resumed"})
+    assert resumed == ["r1"]
+    assert handed_off == []
+
+
+def test_resume_with_own_agent_resumes_natively(agent_server):
+    base_url, resumed, handed_off, *_ = agent_server
+    assert _post_json(f"{base_url}/api/resume/r1", {"agent": "claude"}) == (200, {"status": "resumed"})
+    assert resumed == ["r1"]
+    assert handed_off == []
+
+
+def test_resume_with_other_agent_hands_off(agent_server):
+    base_url, resumed, handed_off, *_ = agent_server
+    assert _post_json(f"{base_url}/api/resume/r1", {"agent": "codex"}) == (200, {"status": "handed_off"})
+    assert handed_off == [("r1", "claude", "codex")]
+    assert resumed == []
+
+
+def test_resume_with_unknown_agent_is_400(agent_server):
+    base_url, resumed, handed_off, *_ = agent_server
+    with pytest.raises(HTTPError) as exc:
+        _post_json(f"{base_url}/api/resume/r1", {"agent": "emacs"})
+    assert exc.value.code == 400
+    assert resumed == [] and handed_off == []
+
+
+def test_handoff_failure_returns_500_with_message(agent_server):
+    base_url, _, _, state, *_ = agent_server
+    state["handoff_error"] = "export failed: disk full"
+    with pytest.raises(HTTPError) as exc:
+        _post_json(f"{base_url}/api/resume/r1", {"agent": "codex"})
+    assert exc.value.code == 500
+    assert json.loads(exc.value.read()) == {"error": "export failed: disk full"}
+
+
+def test_handoff_unconfigured_is_501(tmp_path, ccrider_db):
+    add_session(ccrider_db, "r1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "r1", "user", "wire up thresholds", sequence=1)
+    server = serve(Config(), str(ccrider_db), str(tmp_path / "recaps.db"), str(tmp_path / "config.json"),
+                   lambda s: None, port=0)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        with pytest.raises(HTTPError) as exc:
+            _post_json(f"http://127.0.0.1:{server.server_port}/api/resume/r1", {"agent": "codex"})
+        assert exc.value.code == 501
+        assert json.loads(exc.value.read()) == {"error": "handoff isn't available in this server"}
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_settings_saves_agent_extra_args(agent_server):
+    base_url, _, _, _, config, config_path = agent_server
+    _post_json(f"{base_url}/api/settings", {
+        "codex_extra_args": "--full-auto", "antigravity_extra_args": "--yolo",
+    })
+    assert config.codex_extra_args == "--full-auto"
+    assert config.antigravity_extra_args == "--yolo"
+    on_disk = json.loads(config_path.read_text())
+    assert on_disk["codex_extra_args"] == "--full-auto"
+    assert on_disk["antigravity_extra_args"] == "--yolo"
+    with urllib.request.urlopen(f"{base_url}/api/settings") as resp:
+        cfg = json.loads(resp.read())["config"]
+    assert cfg["codex_extra_args"] == "--full-auto"
+    assert cfg["antigravity_extra_args"] == "--yolo"

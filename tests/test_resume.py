@@ -5,9 +5,11 @@ from datetime import datetime
 import pytest
 
 from reconvene.config import Config
+from reconvene.db import Session
 from reconvene.resume import (
     _applescript_escape,
     exec_resume,
+    launch_in_terminal,
     open_terminal_and_resume,
     resume_command,
     resume_prompt,
@@ -17,14 +19,21 @@ UPDATED_AT = "2026-07-15 10:00:00"
 NOW = datetime(2026, 7, 15, 10, 6, 0)
 
 
+def make_session(session_id="abc123", cwd="/Users/x/Code/myproject", provider="claude", resume_via=""):
+    return Session(session_id, cwd, UPDATED_AT, "2026-01-01 00:00:00", 10, None, None, provider, resume_via)
+
+
+CODEX_ID = "019a1b2c-3d4e-5f60-7182-93a4b5c6d7e8"
+
+
 def test_resume_command():
-    assert resume_command("abc123", UPDATED_AT, now=NOW) == [
+    assert resume_command(make_session(), now=NOW) == [
         "claude", "--resume", "abc123", resume_prompt(UPDATED_AT, NOW),
     ]
 
 
 def test_resume_command_appends_extra_args():
-    assert resume_command("abc123", UPDATED_AT, extra_args="--dangerously-skip-permissions", now=NOW) == [
+    assert resume_command(make_session(), extra=["--dangerously-skip-permissions"], now=NOW) == [
         "claude", "--resume", "abc123", "--dangerously-skip-permissions",
         resume_prompt(UPDATED_AT, NOW),
     ]
@@ -52,7 +61,7 @@ def test_open_terminal_and_resume_runs_osascript():
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
         captured["check"] = check
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=fake_runner,
+    open_terminal_and_resume(make_session(), runner=fake_runner,
                              path_exists=lambda p: True, system="Darwin")
     assert captured["cmd"][0] == "osascript"
     assert captured["cmd"][1] == "-e"
@@ -69,7 +78,7 @@ def test_open_terminal_and_resume_raises_on_failure():
     def failing_runner(cmd, check):
         raise RuntimeError("osascript not found")
     with pytest.raises(RuntimeError, match="osascript not found"):
-        open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=failing_runner,
+        open_terminal_and_resume(make_session(), runner=failing_runner,
                                  path_exists=lambda p: True, system="Darwin")
 
 
@@ -78,7 +87,7 @@ def test_open_terminal_and_resume_uses_iterm2_when_configured():
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
     config = Config(terminal_app="iTerm2")
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, config=config, runner=fake_runner,
+    open_terminal_and_resume(make_session(), config=config, runner=fake_runner,
                              path_exists=lambda p: True, system="Darwin")
     script = captured["cmd"][2]
     assert "iTerm2" in script
@@ -92,7 +101,7 @@ def test_open_terminal_and_resume_appends_configured_extra_args():
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
     config = Config(claude_extra_args="--dangerously-skip-permissions")
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, config=config, runner=fake_runner,
+    open_terminal_and_resume(make_session(), config=config, runner=fake_runner,
                              path_exists=lambda p: True, system="Darwin")
     script = captured["cmd"][2]
     assert "claude --resume abc123 --dangerously-skip-permissions" in script
@@ -111,7 +120,7 @@ def test_open_terminal_and_resume_escapes_prompt_newlines_for_applescript():
     captured = {}
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, runner=fake_runner, now=NOW,
+    open_terminal_and_resume(make_session(), runner=fake_runner, now=NOW,
                              path_exists=lambda p: True, system="Darwin")
     script = captured["cmd"][2]
     assert "\n\n" not in script      # no raw blank line leaked into the AppleScript literal
@@ -126,7 +135,7 @@ def test_open_terminal_and_resume_escapes_double_quote_in_cwd():
     captured = {}
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
-    open_terminal_and_resume("abc123", '/Users/x/Code/proj"evil', UPDATED_AT, runner=fake_runner,
+    open_terminal_and_resume(make_session(cwd='/Users/x/Code/proj"evil'), runner=fake_runner,
                              path_exists=lambda p: True, system="Darwin")
     script = captured["cmd"][2]
     assert 'proj\\"evil' in script    # the path's quote is AppleScript-escaped
@@ -141,7 +150,7 @@ def test_open_terminal_and_resume_raises_when_directory_missing(tmp_path):
     def runner_should_not_run(cmd, check):
         raise AssertionError("osascript must not run when the project directory is missing")
     with pytest.raises(FileNotFoundError, match="was-deleted"):
-        open_terminal_and_resume("abc123", missing, UPDATED_AT, runner=runner_should_not_run)
+        open_terminal_and_resume(make_session(cwd=missing), runner=runner_should_not_run)
 
 
 def test_exec_resume_chdirs_then_execs_claude(tmp_path):
@@ -149,7 +158,7 @@ def test_exec_resume_chdirs_then_execs_claude(tmp_path):
     d.mkdir()
     calls = {}
     exec_resume(
-        "s1", str(d), UPDATED_AT,
+        make_session("s1", str(d)),
         chdir=lambda p: calls.__setitem__("chdir", p),
         execvp=lambda file, args: calls.__setitem__("exec", (file, args)),
     )
@@ -165,7 +174,7 @@ def test_exec_resume_includes_configured_extra_args(tmp_path):
     d.mkdir()
     captured = {}
     exec_resume(
-        "s1", str(d), UPDATED_AT, config=Config(claude_extra_args="--dangerously-skip-permissions"),
+        make_session("s1", str(d)), config=Config(claude_extra_args="--dangerously-skip-permissions"),
         chdir=lambda p: None,
         execvp=lambda file, args: captured.__setitem__("args", args),
     )
@@ -176,7 +185,7 @@ def test_exec_resume_raises_when_directory_missing(tmp_path):
     missing = str(tmp_path / "gone")  # never created; default path_exists=os.path.isdir
     called = []
     with pytest.raises(FileNotFoundError, match="gone"):
-        exec_resume("s1", missing, UPDATED_AT,
+        exec_resume(make_session("s1", missing),
                     chdir=lambda p: called.append("chdir"),
                     execvp=lambda file, args: called.append("exec"))
     assert called == []  # neither chdir nor execvp ran
@@ -189,7 +198,7 @@ def _run_linux(which_ok, config=None, env=None):
     def fake_runner(cmd, check):
         captured["cmd"] = cmd
         captured["check"] = check
-    open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT, config=config,
+    open_terminal_and_resume(make_session(), config=config,
                              runner=fake_runner, path_exists=lambda p: True, system="Linux",
                              which=lambda b: b if b in which_ok else None, env=env or {})
     return captured
@@ -241,6 +250,58 @@ def test_open_terminal_and_resume_rejects_unsupported_platform():
     def runner_should_not_run(cmd, check):
         raise AssertionError("must not launch on an unsupported platform")
     with pytest.raises(RuntimeError, match="isn't supported"):
-        open_terminal_and_resume("abc123", "/Users/x/Code/myproject", UPDATED_AT,
+        open_terminal_and_resume(make_session(),
                                  runner=runner_should_not_run, path_exists=lambda p: True,
                                  system="Windows")
+
+
+# --- Per-agent resume ----------------------------------------------------------
+
+def test_resume_command_codex_session():
+    session = make_session("rollout-2026-07-15T10-00-00-" + CODEX_ID, provider="codex")
+    assert resume_command(session, extra=["--full-auto"], now=NOW) == [
+        "codex", "resume", "--full-auto", CODEX_ID, resume_prompt(UPDATED_AT, NOW),
+    ]
+
+
+def test_exec_resume_execs_codex_binary(tmp_path):
+    d = tmp_path / "proj"
+    d.mkdir()
+    calls = {}
+    exec_resume(
+        make_session("rollout-x-" + CODEX_ID, str(d), provider="codex"),
+        chdir=lambda p: None,
+        execvp=lambda file, args: calls.__setitem__("exec", (file, args)),
+    )
+    file, args = calls["exec"]
+    assert file == "codex"
+    assert args[:2] == ["codex", "resume"]
+
+
+def test_open_terminal_and_resume_uses_agent_extra_args():
+    captured = {}
+    def fake_runner(cmd, check):
+        captured["cmd"] = cmd
+    config = Config(claude_extra_args="--dangerously-skip-permissions", codex_extra_args="--full-auto")
+    open_terminal_and_resume(make_session("rollout-x-" + CODEX_ID, provider="codex"), config=config,
+                             runner=fake_runner, path_exists=lambda p: True, system="Darwin")
+    script = captured["cmd"][2]
+    assert "codex resume --full-auto" in script
+    assert "--dangerously-skip-permissions" not in script
+
+
+def test_launch_in_terminal_types_the_given_argv():
+    captured = {}
+    def fake_runner(cmd, check):
+        captured["cmd"] = cmd
+    launch_in_terminal(["agy", "--conversation", "c1"], "/Users/x/Code/myproject", runner=fake_runner,
+                       path_exists=lambda p: True, system="Darwin")
+    script = captured["cmd"][2]
+    assert "cd /Users/x/Code/myproject && agy --conversation c1" in script
+
+
+def test_launch_in_terminal_raises_when_directory_missing(tmp_path):
+    def runner_should_not_run(cmd, check):
+        raise AssertionError("must not launch when the project directory is missing")
+    with pytest.raises(FileNotFoundError, match="gone"):
+        launch_in_terminal(["agy"], str(tmp_path / "gone"), runner=runner_should_not_run)
