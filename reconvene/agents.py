@@ -68,13 +68,13 @@ def fresh_argv(name: str, prompt: str, extra: list[str]) -> list[str]:
 def headless_argv(name: str, prompt: str, output_file: str) -> list[str]:
     binary = get_agent(name).binary
     if name == "claude":
-        return [binary, "-p", "--model", MODEL, "--no-session-persistence", prompt]
+        return [binary, "-p", "--model", MODEL, "--no-session-persistence", "--tools", "", prompt]
     if name == "codex":
         return [
             binary, "exec", "--ephemeral", "--skip-git-repo-check",
             "-s", "read-only", "-o", output_file, prompt,
         ]
-    return [binary, "-p", prompt]
+    return [binary, "-p", "--mode", "plan", "--sandbox", prompt]
 
 
 _TRANSCRIPT_GLOBS = {
