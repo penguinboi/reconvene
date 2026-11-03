@@ -17,6 +17,8 @@ class Config:
     api_key: str | None = None
     terminal_app: str = "Terminal"
     claude_extra_args: str = ""
+    codex_extra_args: str = ""
+    antigravity_extra_args: str = ""
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -36,6 +38,8 @@ class Config:
             api_key=d.get("api_key"),
             terminal_app=d.get("terminal_app", "Terminal"),
             claude_extra_args=d.get("claude_extra_args", ""),
+            codex_extra_args=d.get("codex_extra_args", ""),
+            antigravity_extra_args=d.get("antigravity_extra_args", ""),
         )
 
 
