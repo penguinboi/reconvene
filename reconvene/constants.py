@@ -23,6 +23,7 @@ HOME = Path.home()
 CCRIDER_DB = HOME / ".config" / "ccrider" / "sessions.db"
 RECAP_CACHE_DB = HOME / ".config" / "reconvene" / "recaps.db"
 CONFIG_PATH = HOME / ".config" / "reconvene" / "config.json"
+HANDOFF_DIR = HOME / ".config" / "reconvene" / "handoffs"
 
 DROP_SUBSTRINGS = ("/private/", "/scratchpad")
 WORKTREE_MARKERS = ("/.claude-worktrees/", "/.worktrees/", "--claude-worktrees")

@@ -234,3 +234,16 @@ def test_build_session_prompt_includes_transcript(ccrider_db):
     prompt = build_session_prompt(_session(), str(ccrider_db))
     assert "summarize the raid migration" in prompt
     assert "ONELINE:" in prompt and "DETAIL:" in prompt
+
+
+def test_claude_env_subscription_drops_key(monkeypatch):
+    from reconvene.recap import claude_env
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-inherited")
+    assert "ANTHROPIC_API_KEY" not in claude_env(Config())
+
+
+def test_claude_env_api_key_mode_sets_key(monkeypatch):
+    from reconvene.recap import claude_env
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-inherited")
+    env = claude_env(Config(recap_auth_mode="api_key", api_key="sk-test"))
+    assert env["ANTHROPIC_API_KEY"] == "sk-test"
