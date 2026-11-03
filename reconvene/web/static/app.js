@@ -17,7 +17,9 @@ const fullRecaps = new Map(); // project name -> full recap text, populated only
 let agentsPromise = null;
 function loadAgents() {
   if (!agentsPromise) {
-    agentsPromise = fetch("/api/agents").then((r) => r.json()).then((data) => data.agents);
+    // A failed fetch is dropped so the next call retries instead of replaying the failure.
+    agentsPromise = fetch("/api/agents").then((r) => r.json()).then((data) => data.agents)
+      .catch((err) => { agentsPromise = null; throw err; });
   }
   return agentsPromise;
 }
@@ -29,6 +31,16 @@ function confirmLabel(agents, modal) {
   if (!target) return "Resume";
   return modal.dataset.agent === modal.dataset.provider
     ? `Resume in ${target.label}` : `Hand off to ${target.label}`;
+}
+
+// While a handoff request is in flight (dataset.working) the button is busy and the switch
+// is locked, so the label and target cannot change under the pending request.
+function refreshConfirmButton(agents, modal) {
+  const button = document.getElementById("modalConfirm");
+  const working = modal.dataset.working === "1";
+  const target = agents.find((a) => a.name === modal.dataset.agent);
+  button.disabled = working;
+  button.textContent = working ? `Summarizing with ${target.label}…` : confirmLabel(agents, modal);
 }
 
 function renderAgentSwitch(agents) {
@@ -44,7 +56,7 @@ function renderAgentSwitch(agents) {
     btn.type = "button";
     btn.dataset.agent = a.name;
     btn.textContent = a.label;
-    btn.disabled = !a.installed;
+    btn.disabled = !a.installed || modal.dataset.working === "1";
     if (a.name === modal.dataset.agent) btn.classList.add("selected");
     btn.addEventListener("click", () => {
       modal.dataset.agent = a.name;
@@ -53,7 +65,7 @@ function renderAgentSwitch(agents) {
     switchEl.appendChild(btn);
   }
   switchEl.classList.remove("hidden");
-  document.getElementById("modalConfirm").textContent = confirmLabel(agents, modal);
+  refreshConfirmButton(agents, modal);
 }
 
 // Points the switch at a session: its own agent is the default target.
@@ -61,13 +73,15 @@ function selectSessionAgent(provider) {
   const modal = document.getElementById("confirmModal");
   modal.dataset.provider = provider;
   modal.dataset.agent = provider;
-  return loadAgents().then(renderAgentSwitch);
+  return loadAgents().then(renderAgentSwitch)
+    .catch((err) => showError(`Couldn't load the agent list: ${err.message}`));
 }
 
 function clearAgentSwitch() {
   const modal = document.getElementById("confirmModal");
   modal.dataset.provider = "";
   modal.dataset.agent = "";
+  delete modal.dataset.working;
   document.getElementById("modalAgentSwitch").classList.add("hidden");
   document.getElementById("modalConfirm").textContent = "Resume";
   document.getElementById("modalConfirm").disabled = false;
@@ -107,6 +121,7 @@ function showConfirmModal(project) {
         badge.textContent = s.provider;
         row.append(badge, `${s.relative} · ${s.message_count} msgs · ${s.first_msg}`);
         row.addEventListener("click", () => {
+          if (modal.dataset.working === "1") return; // locked during a handoff
           modal.dataset.sessionId = s.session_id;
           selectSessionAgent(s.provider);
           list.querySelectorAll(".session-row.selected")
@@ -214,30 +229,33 @@ async function resumeProject(sessionId, agent) {
 
 // A handoff has the target agent write a summary first, which takes a while: keep the modal
 // open with the button busy so the click visibly did something, and show a failure in place.
-async function handOff(modal, confirmButton) {
-  const agents = await loadAgents();
+async function handOff(modal) {
   const errorEl = document.getElementById("modalError");
-  const idleLabel = confirmButton.textContent;
-  const target = agents.find((a) => a.name === modal.dataset.agent);
   errorEl.classList.add("hidden");
-  confirmButton.disabled = true;
-  confirmButton.textContent = `Summarizing with ${target.label}…`;
-  const res = await fetch(`/api/resume/${modal.dataset.sessionId}`, agentRequestBody(modal.dataset.agent));
-  if (res.ok) {
+  let agents = null;
+  try {
+    agents = await loadAgents();
+    modal.dataset.working = "1";
+    renderAgentSwitch(agents);
+    const res = await fetch(`/api/resume/${modal.dataset.sessionId}`, agentRequestBody(modal.dataset.agent));
+    if (!res.ok) {
+      const data = await res.json(); // a non-JSON error body throws and is shown below
+      throw new Error(data.error);
+    }
     hideConfirmModal();
-  } else {
-    const data = await res.json();
-    errorEl.textContent = `Couldn't hand off: ${data.error}`;
+  } catch (err) {
+    errorEl.textContent = `Couldn't hand off: ${err.message}`;
     errorEl.classList.remove("hidden");
+  } finally {
+    delete modal.dataset.working;
+    if (agents) renderAgentSwitch(agents);
   }
-  confirmButton.disabled = false;
-  confirmButton.textContent = idleLabel;
 }
 
-document.getElementById("modalConfirm").addEventListener("click", (e) => {
+document.getElementById("modalConfirm").addEventListener("click", () => {
   const modal = document.getElementById("confirmModal");
   if (modal.dataset.agent && modal.dataset.agent !== modal.dataset.provider) {
-    handOff(modal, e.currentTarget);
+    handOff(modal);
     return;
   }
   const { sessionId, agent } = modal.dataset;

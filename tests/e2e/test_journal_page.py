@@ -514,3 +514,64 @@ def test_selected_agent_button_is_visible_against_switch(page, e2e_server_with_h
     selected = _background_of(page, "#modalAgentSwitch button.selected")
     assert selected != _background_of(page, "#modalAgentSwitch")
     assert selected != _background_of(page, "#modalAgentSwitch button:not(.selected):not(:disabled)")
+
+
+def test_handoff_in_flight_locks_switch_and_rows(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, handoffs, hold = e2e_server_with_handoff
+    hold["release"] = threading.Event()
+    hold["error"] = "summary failed"
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    page.locator("#modalConfirm").click()
+    page.locator("#modalConfirm", has_text="Summarizing with Claude…").wait_for()
+
+    page.locator('#modalAgentSwitch button[data-agent="codex"]').click(force=True)
+    page.locator(".session-row", has_text="older claude").click()
+    assert page.locator("#modalConfirm").inner_text() == "Summarizing with Claude…"
+    assert page.evaluate("document.getElementById('confirmModal').dataset.agent") == "claude"
+    assert "newer codex" in page.locator(".session-row.selected").inner_text()
+
+    hold["release"].set()
+    page.locator("#modalError").wait_for(state="visible")
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    assert page.locator('#modalAgentSwitch button.selected').get_attribute("data-agent") == "claude"
+    assert not page.locator('#modalAgentSwitch button[data-agent="codex"]').is_disabled()
+
+
+def test_handoff_non_json_failure_shows_error_and_reenables(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/resume/*", lambda route: route.fulfill(
+        status=500, content_type="text/html", body="<html>proxy exploded</html>"))
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#modalError")
+    error.wait_for(state="visible")
+    assert error.inner_text().strip() != ""
+    assert not page.locator("#modalConfirm").is_disabled()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+
+
+def test_agents_fetch_failure_is_shown(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/agents", lambda route: route.abort())
+    _seed_mixed_agents(ccrider_db)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#error").wait_for(state="visible")
+    assert "agent list" in page.locator("#error").inner_text().lower()
+
+
+def test_agents_fetch_is_retried_after_a_failure(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/agents", lambda route: route.abort())
+    _seed_mixed_agents(ccrider_db)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#error").wait_for(state="visible")
+    page.unroute("**/api/agents")
+    page.locator("#modalCancel").click()
+    page.locator(".project").click()
+    page.locator('#modalAgentSwitch button[data-agent="codex"]').wait_for()
