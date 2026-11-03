@@ -2,10 +2,12 @@
 # ABOUTME: Bound to 127.0.0.1 only; never exposed to the network.
 import json
 import mimetypes
+import shutil
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from ..agents import AGENTS, installed_agents
 from ..classify import canonical_name
 from ..cluster import TopicAuthError, TopicCache, load_topic_lookup, organize, unassigned_loose_sessions
 from ..config import save_config
@@ -53,7 +55,8 @@ def _project_summary(p, db_path):
     }
 
 
-def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner=None):
+def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner=None, handoff=None,
+                 which=shutil.which):
     def _journal(sessions):
         return build_journal(sessions, config, topic_lookup=load_topic_lookup(cache_path))
 
@@ -170,8 +173,16 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                         "relative": relative_time(s.updated_at),
                         "message_count": s.message_count,
                         "first_msg": first_user_message(db_path, s.session_id),
+                        "provider": s.provider,
                     }
                     for s in project.sessions
+                ]})
+                return
+            if path == "/api/agents":
+                installed = installed_agents(which)
+                self._send_json(200, {"agents": [
+                    {"name": a.name, "label": a.label, "installed": installed[a.name]}
+                    for a in AGENTS.values()
                 ]})
                 return
             if path == "/api/settings":
@@ -219,12 +230,24 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 if match is None:
                     self._send_json(404, {"error": f"no session {session_id!r}"})
                     return
+                # A missing or empty body means a native resume (the search page posts none).
+                target = json.loads(body).get("agent") if body.strip() else None
+                if target is not None and target not in AGENTS:
+                    self._send_json(400, {"error": f"unknown agent {target!r}"})
+                    return
+                handing_off = target is not None and target != match.provider
+                if handing_off and handoff is None:
+                    self._send_json(501, {"error": "handoff isn't available in this server"})
+                    return
                 try:
-                    resumer(match)
+                    if handing_off:
+                        handoff(match, target)
+                    else:
+                        resumer(match)
                 except Exception as e:
                     self._send_json(500, {"error": str(e)})
                     return
-                self._send_json(200, {"status": "resumed"})
+                self._send_json(200, {"status": "handed_off" if handing_off else "resumed"})
                 return
             if path == "/api/settings":
                 data = json.loads(body)
@@ -239,6 +262,8 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                     config.api_key = new_key
                 config.terminal_app = data.get("terminal_app", config.terminal_app)
                 config.claude_extra_args = data.get("claude_extra_args", config.claude_extra_args)
+                config.codex_extra_args = data.get("codex_extra_args", config.codex_extra_args)
+                config.antigravity_extra_args = data.get("antigravity_extra_args", config.antigravity_extra_args)
                 save_config(config, config_path)
                 self._send_json(200, {"status": "saved", "config": _redacted_config(config)})
                 return
@@ -265,6 +290,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
     return Handler
 
 
-def serve(config, db_path, cache_path, config_path, resumer, recap_runner=None, host="127.0.0.1", port=0):
-    handler = make_handler(config, db_path, cache_path, config_path, resumer, recap_runner)
+def serve(config, db_path, cache_path, config_path, resumer, recap_runner=None, handoff=None,
+          which=shutil.which, host="127.0.0.1", port=0):
+    handler = make_handler(config, db_path, cache_path, config_path, resumer, recap_runner, handoff, which)
     return ThreadingHTTPServer((host, port), handler)
