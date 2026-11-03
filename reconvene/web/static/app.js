@@ -123,7 +123,7 @@ function showConfirmModal(project) {
         if (s.session_id === modal.dataset.sessionId) row.classList.add("selected");
         const badge = document.createElement("span");
         badge.className = `agent-badge agent-${s.provider}`;
-        badge.textContent = s.provider;
+        badge.textContent = s.agent_label;
         row.append(badge, `${s.relative} · ${s.message_count} msgs · ${s.first_msg}`);
         row.addEventListener("click", () => {
           if (modal.dataset.working === "1") return; // locked during a handoff
@@ -225,10 +225,14 @@ function agentRequestBody(agent) {
 }
 
 async function resumeProject(sessionId, agent) {
-  const res = await fetch(`/api/resume/${sessionId}`, agentRequestBody(agent));
-  if (!res.ok) {
-    const data = await res.json();
-    showError(`Couldn't resume: ${data.error}`);
+  try {
+    const res = await fetch(`/api/resume/${sessionId}`, agentRequestBody(agent));
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({})); // a non-JSON error body has no message
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+  } catch (err) {
+    showError(`Couldn't resume: ${err.message}`);
   }
 }
 

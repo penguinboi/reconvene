@@ -405,6 +405,8 @@ def test_session_rows_show_agent_badges(page, e2e_server_with_handoff, ccrider_d
     _open_mixed_modal(page, base_url, ccrider_db)
 
     assert page.locator(".session-row", has_text="newer codex").locator(".agent-badge.agent-codex").count() == 1
+    assert page.locator(".agent-badge.agent-codex").inner_text() == "Codex"
+    assert page.locator(".agent-badge.agent-claude").inner_text() == "Claude"
     assert page.locator(".session-row", has_text="older claude").locator(".agent-badge.agent-claude").count() == 1
 
 
@@ -598,3 +600,46 @@ def test_cancel_is_disabled_while_handoff_is_in_flight(page, e2e_server_with_han
     assert not page.locator("#modalCancel").is_disabled()
     page.locator("#modalCancel").click()
     page.locator("#confirmModal.hidden").wait_for(state="attached")
+
+
+def test_native_resume_non_json_failure_is_shown(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/resume/*", lambda route: route.fulfill(
+        status=502, content_type="text/html", body="<html>proxy exploded</html>"))
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#error")
+    error.wait_for(state="visible")
+    assert "Couldn't resume" in error.inner_text()
+    assert "undefined" not in error.inner_text()
+
+
+def test_native_resume_error_without_message_shows_http_status(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/resume/*", lambda route: route.fulfill(
+        status=500, content_type="application/json", body="{}"))
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#error")
+    error.wait_for(state="visible")
+    assert "500" in error.inner_text()
+    assert "undefined" not in error.inner_text()
+
+
+def test_native_resume_network_failure_is_shown(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    page.route("**/api/resume/*", lambda route: route.abort())
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "wire up thresholds", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#modalConfirm").click()
+    error = page.locator("#error")
+    error.wait_for(state="visible")
+    assert "Couldn't resume" in error.inner_text()

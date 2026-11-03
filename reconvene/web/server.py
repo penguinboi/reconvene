@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ..agents import AGENTS, installed_agents
+from ..agents import AGENTS, get_agent, installed_agents
 from ..classify import canonical_name
 from ..cluster import TopicAuthError, TopicCache, load_topic_lookup, organize, unassigned_loose_sessions
 from ..config import save_config
@@ -174,6 +174,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                         "message_count": s.message_count,
                         "first_msg": first_user_message(db_path, s.session_id),
                         "provider": s.provider,
+                        "agent_label": get_agent(s.provider).label,
                     }
                     for s in project.sessions
                 ]})

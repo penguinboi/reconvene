@@ -695,6 +695,8 @@ def test_sessions_rows_include_provider(agent_server, ccrider_db):
         rows = {s["session_id"]: s for s in json.loads(resp.read())["sessions"]}
     assert rows["cx1"]["provider"] == "codex"
     assert rows["r1"]["provider"] == "claude"
+    assert rows["cx1"]["agent_label"] == "Codex"
+    assert rows["r1"]["agent_label"] == "Claude"
 
 
 def test_agents_endpoint_reports_installed(agent_server):
