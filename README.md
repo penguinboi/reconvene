@@ -74,6 +74,19 @@ Settings (linked from the main page) to override classification for a specific p
 or to choose how recap generation authenticates with Claude Code. The top bar has a
 **light / dark / auto** theme toggle (auto follows your system, and is the default).
 
+### Open in another agent
+
+Each session row shows which agent made it (Claude, Codex or Antigravity). The resume
+window has an "Open in" switch that starts on that agent, so the button reads "Resume in
+Codex" for a Codex session. Pick a different agent and the button becomes "Hand off to
+Claude". A handoff has the target agent write a summary of the session first, then opens
+it in a new terminal with that summary as context. The window stays open while the summary
+is written and shows any error in place. Agents whose binary is not on your PATH are greyed out.
+
+Handoff exports are written to `~/.config/reconvene/handoffs/`. Settings has a flags field
+for each agent (`claude`, `codex`, `agy`); those flags are added when that agent is opened,
+whether by a resume or a handoff. The summary step never receives them.
+
 ## Testing
 
 ```bash

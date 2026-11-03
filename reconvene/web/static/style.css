@@ -349,6 +349,51 @@ table td, table th {
   background: var(--accent-glow);
 }
 
+/* Agent badge on a session row, and the "Open in" switch under the picker */
+.agent-badge {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 0 6px;
+  font-size: 0.75em;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.agent-switch {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.agent-switch.hidden { display: none; }
+.agent-switch-label {
+  padding: 0 6px;
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+/* The container is painted --bg, so unselected buttons are transparent (same as the container)
+   and the selected one takes --accent: three distinct states, none matching --card-bg. */
+#modalAgentSwitch button {
+  background: transparent;
+  color: var(--text);
+  padding: 0.3rem 0.8rem;
+}
+#modalAgentSwitch button:hover:not(:disabled):not(.selected) { background: var(--card-bg); }
+#modalAgentSwitch button.selected,
+#modalAgentSwitch button.selected:hover {
+  background: var(--accent);
+  color: white;
+}
+#modalAgentSwitch button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+#modalError.hidden { display: none; }
+
 /* Topic groups */
 .kind-tag {
   margin-left: 8px;

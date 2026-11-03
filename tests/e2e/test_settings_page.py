@@ -66,3 +66,26 @@ def test_settings_edit_and_save_persists_to_disk(page, e2e_server, ccrider_db):
     assert reloaded.hidden_path_substrings == {"sarb_agent_", "scratch-"}
     assert reloaded.terminal_app == "iTerm2"
     assert reloaded.claude_extra_args == "--dangerously-skip-permissions"
+
+
+def test_settings_saves_codex_and_antigravity_args(page, e2e_server):
+    base_url, resumed, config, config_path = e2e_server
+
+    page.goto(f"{base_url}/settings.html")
+    page.locator("#codexExtraArgs").wait_for()
+    page.locator("#codexExtraArgs").fill("--full-auto")
+    page.locator("#antigravityExtraArgs").fill("--verbose")
+    with page.expect_response(
+        lambda r: r.url.endswith("/api/settings") and r.request.method == "POST"
+    ) as resp_info:
+        page.locator("#save").click()
+    assert resp_info.value.status == 200
+
+    reloaded = load_config(config_path)
+    assert reloaded.codex_extra_args == "--full-auto"
+    assert reloaded.antigravity_extra_args == "--verbose"
+
+    page.reload()
+    page.locator("#codexExtraArgs").wait_for()
+    page.wait_for_function("document.getElementById('codexExtraArgs').value !== ''")
+    assert page.locator("#antigravityExtraArgs").input_value() == "--verbose"

@@ -13,6 +13,67 @@ function showError(message) {
 
 const fullRecaps = new Map(); // project name -> full recap text, populated only once actually fetched
 
+// The agents the "Open in" switch offers, in display order: [{name, label, installed}].
+let agentsPromise = null;
+function loadAgents() {
+  if (!agentsPromise) {
+    agentsPromise = fetch("/api/agents").then((r) => r.json()).then((data) => data.agents);
+  }
+  return agentsPromise;
+}
+
+// The modal carries two agent names: dataset.provider (who made the selected session) and
+// dataset.agent (who the user wants to open it in). Different means a handoff.
+function confirmLabel(agents, modal) {
+  const target = agents.find((a) => a.name === modal.dataset.agent);
+  if (!target) return "Resume";
+  return modal.dataset.agent === modal.dataset.provider
+    ? `Resume in ${target.label}` : `Hand off to ${target.label}`;
+}
+
+function renderAgentSwitch(agents) {
+  const modal = document.getElementById("confirmModal");
+  const switchEl = document.getElementById("modalAgentSwitch");
+  switchEl.innerHTML = "";
+  const label = document.createElement("span");
+  label.className = "agent-switch-label";
+  label.textContent = "Open in";
+  switchEl.appendChild(label);
+  for (const a of agents) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.agent = a.name;
+    btn.textContent = a.label;
+    btn.disabled = !a.installed;
+    if (a.name === modal.dataset.agent) btn.classList.add("selected");
+    btn.addEventListener("click", () => {
+      modal.dataset.agent = a.name;
+      renderAgentSwitch(agents);
+    });
+    switchEl.appendChild(btn);
+  }
+  switchEl.classList.remove("hidden");
+  document.getElementById("modalConfirm").textContent = confirmLabel(agents, modal);
+}
+
+// Points the switch at a session: its own agent is the default target.
+function selectSessionAgent(provider) {
+  const modal = document.getElementById("confirmModal");
+  modal.dataset.provider = provider;
+  modal.dataset.agent = provider;
+  return loadAgents().then(renderAgentSwitch);
+}
+
+function clearAgentSwitch() {
+  const modal = document.getElementById("confirmModal");
+  modal.dataset.provider = "";
+  modal.dataset.agent = "";
+  document.getElementById("modalAgentSwitch").classList.add("hidden");
+  document.getElementById("modalConfirm").textContent = "Resume";
+  document.getElementById("modalConfirm").disabled = false;
+  document.getElementById("modalError").classList.add("hidden");
+}
+
 function showConfirmModal(project) {
   // Resume defaults to the latest session. A loose/topic group aggregates unrelated sessions, so
   // its latest may not be the one wanted -- those always show the full picker to override it.
@@ -25,10 +86,13 @@ function showConfirmModal(project) {
   modal.dataset.sessionId = project.latest_session_id;
   const list = document.getElementById("modalSessions");
   list.innerHTML = "";
+  clearAgentSwitch();
   fetch(`/api/sessions/${encodeURIComponent(project.name)}`)
     .then((r) => r.json())
     .then((data) => {
       if (!data.sessions) return;
+      const current = data.sessions.find((s) => s.session_id === modal.dataset.sessionId);
+      if (current) selectSessionAgent(current.provider);
       if (!isGroup && data.sessions.length < 2) return; // one session, real project: nothing to pick
       const hint = document.createElement("div");
       hint.className = "session-hint";
@@ -38,9 +102,13 @@ function showConfirmModal(project) {
         const row = document.createElement("div");
         row.className = "session-row";
         if (s.session_id === modal.dataset.sessionId) row.classList.add("selected");
-        row.textContent = `${s.relative} · ${s.message_count} msgs · ${s.first_msg}`;
+        const badge = document.createElement("span");
+        badge.className = `agent-badge agent-${s.provider}`;
+        badge.textContent = s.provider;
+        row.append(badge, `${s.relative} · ${s.message_count} msgs · ${s.first_msg}`);
         row.addEventListener("click", () => {
           modal.dataset.sessionId = s.session_id;
+          selectSessionAgent(s.provider);
           list.querySelectorAll(".session-row.selected")
             .forEach((n) => n.classList.remove("selected"));
           row.classList.add("selected");
@@ -131,18 +199,50 @@ async function loadJournal() {
   }
 }
 
-async function resumeProject(sessionId) {
-  const res = await fetch(`/api/resume/${sessionId}`, { method: "POST" });
+function agentRequestBody(agent) {
+  return agent ? { method: "POST", headers: { "Content-Type": "application/json" },
+                   body: JSON.stringify({ agent }) } : { method: "POST" };
+}
+
+async function resumeProject(sessionId, agent) {
+  const res = await fetch(`/api/resume/${sessionId}`, agentRequestBody(agent));
   if (!res.ok) {
     const data = await res.json();
     showError(`Couldn't resume: ${data.error}`);
   }
 }
 
-document.getElementById("modalConfirm").addEventListener("click", () => {
-  const sessionId = document.getElementById("confirmModal").dataset.sessionId;
+// A handoff has the target agent write a summary first, which takes a while: keep the modal
+// open with the button busy so the click visibly did something, and show a failure in place.
+async function handOff(modal, confirmButton) {
+  const agents = await loadAgents();
+  const errorEl = document.getElementById("modalError");
+  const idleLabel = confirmButton.textContent;
+  const target = agents.find((a) => a.name === modal.dataset.agent);
+  errorEl.classList.add("hidden");
+  confirmButton.disabled = true;
+  confirmButton.textContent = `Summarizing with ${target.label}…`;
+  const res = await fetch(`/api/resume/${modal.dataset.sessionId}`, agentRequestBody(modal.dataset.agent));
+  if (res.ok) {
+    hideConfirmModal();
+  } else {
+    const data = await res.json();
+    errorEl.textContent = `Couldn't hand off: ${data.error}`;
+    errorEl.classList.remove("hidden");
+  }
+  confirmButton.disabled = false;
+  confirmButton.textContent = idleLabel;
+}
+
+document.getElementById("modalConfirm").addEventListener("click", (e) => {
+  const modal = document.getElementById("confirmModal");
+  if (modal.dataset.agent && modal.dataset.agent !== modal.dataset.provider) {
+    handOff(modal, e.currentTarget);
+    return;
+  }
+  const { sessionId, agent } = modal.dataset;
   hideConfirmModal();
-  resumeProject(sessionId);
+  resumeProject(sessionId, agent);
 });
 
 document.getElementById("modalCancel").addEventListener("click", hideConfirmModal);
@@ -233,6 +333,7 @@ function showSessionModal(hit) {
   modal.dataset.sessionId = hit.session_id;
   modal.dataset.projectName = hit.project;
   document.getElementById("modalSessions").innerHTML = "";
+  clearAgentSwitch(); // a search hit carries no agent, so it resumes natively
   modal.classList.remove("hidden");
   // Fetch the per-session recap and fill it in below the snippet (guard against a stale response if
   // the user has since opened a different session's modal).
