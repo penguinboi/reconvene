@@ -71,7 +71,7 @@ def _iterm2_script(shell_command: str) -> str:
 
 def _linux_terminal_argv(binary: str, shell_command: str) -> list[str]:
     # Run the resume command in a login shell, then `exec bash` so the window stays open after
-    # Claude exits (matching macOS Terminal, which keeps the window). gnome-terminal takes the
+    # the agent exits (matching macOS Terminal, which keeps the window). gnome-terminal takes the
     # command after `--`; kitty takes it directly; everything else uses the classic `-e`.
     persist = f"{shell_command}; exec bash"
     if binary == "gnome-terminal":
@@ -103,7 +103,7 @@ def launch_in_terminal(argv: list[str], cwd: str, config=None,
                        runner=subprocess.run, path_exists=os.path.isdir, system=None,
                        which=shutil.which, env=None) -> None:
     if not path_exists(cwd):
-        # `cd <cwd> && claude` would silently no-op if the directory is gone (the launcher still
+        # `cd <cwd> && <agent>` would silently no-op if the directory is gone (the launcher still
         # exits 0), so the caller would falsely believe the session resumed. Fail loudly instead.
         raise FileNotFoundError(f"project directory no longer exists: {cwd}")
     command = " ".join(shlex.quote(part) for part in argv)
@@ -132,7 +132,7 @@ def exec_resume(session, config=None,
     # Foreground handoff for the TUI: replace this process with the session's agent in the
     # project's directory. Unlike open_terminal_and_resume (which must spawn a window because the
     # web server keeps running), the TUI is a foreground process, so execvp gives the terminal
-    # straight to the agent. Reuses resume_command so the injected resume-context prompt is identical.
+    # straight to the agent. Uses resume_command, the same argv the web path launches.
     if not path_exists(session.project_path):
         raise FileNotFoundError(f"project directory no longer exists: {session.project_path}")
     argv = resume_command(session, extra_args_for(session.provider, config))
