@@ -11,7 +11,8 @@ from reconvene.agents import extra_args_for, fresh_argv, headless_argv
 from reconvene.config import Config
 from reconvene.db import Session
 from reconvene.handoff import (
-    EXCERPT_OVERHEAD, export_session, handoff_excerpt, handoff_prompt, perform_handoff, summarize, summary_request,
+    EXCERPT_OVERHEAD, export_session, handoff_excerpt, handoff_prompt, perform_handoff, printable_summary,
+    summarize, summary_request, SUMMARY_MAX_CHARS,
 )
 from reconvene.resume import _applescript_escape, launch_in_terminal
 from tests.conftest import add_message, add_session
@@ -31,6 +32,8 @@ class FakeRunner:
             raise self.raises
         if self.respond:
             self.respond(argv)
+        elif argv[:2] == ["ccrider", "export"] and not self.returncode:
+            Path(argv[argv.index("--output") + 1]).write_text("exported")  # ccrider writes the file
         if kwargs.get("check") and self.returncode:
             raise subprocess.CalledProcessError(self.returncode, argv)
         return subprocess.CompletedProcess(argv, self.returncode, self.stdout, self.stderr)
@@ -283,3 +286,41 @@ def test_summarize_codex_without_output_file_raises():
     runner = FakeRunner(stdout="stdout text must not be used")
     with pytest.raises(RuntimeError, match="Codex could not write the summary"):
         summarize("codex", "P", Config(), runner=runner)
+
+
+def test_printable_summary_removes_control_characters():
+    dirty = "a\x03b\x15c\x1bd\x7fe\tf\rg\x00h\nline2"
+    assert printable_summary(dirty) == "abcde fgh\nline2"
+
+
+def test_printable_summary_caps_length():
+    assert len(printable_summary("x" * (SUMMARY_MAX_CHARS + 500))) == SUMMARY_MAX_CHARS
+
+
+def test_handoff_prompt_receives_sanitized_summary(ccrider_db, tmp_path):
+    runner, launched, launcher = _handoff_env(ccrider_db, tmp_path, "safe\x03\x1b[31m text\r\nnext")
+    perform_handoff(_session(), "claude", Config(), ccrider_db, runner=runner,
+                    launcher=launcher, path_exists=lambda p: True,
+                    home=tmp_path, handoff_dir=tmp_path / "h")
+    prompt = launched[0][0][-1]
+    assert "safe[31m text\nnext" in prompt
+    assert not any(ord(c) < 0x20 and c != "\n" or ord(c) == 0x7F for c in prompt)
+
+
+def test_summarize_error_uses_stdout_when_stderr_is_blank():
+    runner = FakeRunner(returncode=1, stdout="usage limit reached on stdout", stderr="  ")
+    with pytest.raises(RuntimeError, match="usage limit reached on stdout"):
+        summarize("claude", "P", Config(), runner=runner)
+
+
+def test_export_error_uses_stdout_when_stderr_is_blank(tmp_path):
+    runner = FakeRunner(returncode=1, stdout="no such session", stderr="")
+    with pytest.raises(RuntimeError, match="no such session"):
+        export_session("abc", tmp_path / "h", runner=runner)
+
+
+def test_export_session_keeps_transcripts_private(tmp_path):
+    dest = tmp_path / "handoffs"
+    path = export_session("abc", dest, runner=FakeRunner())
+    assert dest.stat().st_mode & 0o777 == 0o700
+    assert path.stat().st_mode & 0o777 == 0o600

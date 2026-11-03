@@ -20,6 +20,11 @@ TRUNCATION_MARKER = "[... truncated ...]"
 EXPORT_TIMEOUT_SECONDS = 60
 SUMMARY_TIMEOUT_SECONDS = 180
 ERROR_TEXT_CHARS = 300
+SUMMARY_MAX_CHARS = 6000
+PRIVATE_DIR_MODE = 0o700
+PRIVATE_FILE_MODE = 0o600
+_CONTROL_CHARS = {c: None for c in [*range(0x20), 0x7F] if c != ord("\n")}
+_CONTROL_CHARS[ord("\t")] = " "
 
 
 def handoff_excerpt(db_path, session_id, char_cap: int = 40000) -> str:
@@ -54,6 +59,17 @@ def handoff_excerpt(db_path, session_id, char_cap: int = 40000) -> str:
     return "\n\n".join(head + marker + lines[tail_start:])
 
 
+def printable_summary(summary: str) -> str:
+    # The summary is model output derived from untrusted transcript text and ends up typed into a
+    # terminal, so tabs become spaces and every other control character except newline is dropped.
+    return summary.translate(_CONTROL_CHARS)[:SUMMARY_MAX_CHARS]
+
+
+def failure_text(proc) -> str:
+    # Agents and ccrider sometimes report errors on stdout and leave stderr empty.
+    return (proc.stderr.strip() or proc.stdout.strip())[:ERROR_TEXT_CHARS]
+
+
 def summary_request(excerpt: str, from_label: str) -> str:
     return (
         f"Below is the opening request and the most recent messages of a coding session with {from_label}. "
@@ -82,7 +98,7 @@ def handoff_prompt(from_label: str, summary: str, export_path: Path, transcript:
 
 def export_session(session_id: str, dest_dir: Path, runner=subprocess.run) -> Path:
     dest_dir = Path(dest_dir)
-    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest_dir.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR_MODE)
     path = dest_dir / f"{session_id}.md"
     try:
         proc = runner(["ccrider", "export", session_id, "--output", str(path), "--force"],
@@ -92,7 +108,8 @@ def export_session(session_id: str, dest_dir: Path, runner=subprocess.run) -> Pa
             f"ccrider could not export the session: timed out after {EXPORT_TIMEOUT_SECONDS}s"
         ) from None
     if proc.returncode != 0:
-        raise RuntimeError(f"ccrider could not export the session: {proc.stderr.strip()[:ERROR_TEXT_CHARS]}")
+        raise RuntimeError(f"ccrider could not export the session: {failure_text(proc)}")
+    path.chmod(PRIVATE_FILE_MODE)
     return path
 
 
@@ -109,7 +126,7 @@ def summarize(name: str, prompt: str, config, runner=subprocess.run,
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"{label} could not write the summary: timed out after {timeout}s") from None
         if proc.returncode != 0:
-            raise RuntimeError(f"{label} could not write the summary: {proc.stderr.strip()[:ERROR_TEXT_CHARS]}")
+            raise RuntimeError(f"{label} could not write the summary: {failure_text(proc)}")
         if name == "codex":
             if not output_file.exists():
                 raise RuntimeError(f"{label} could not write the summary: it wrote no output file")
@@ -132,7 +149,7 @@ def perform_handoff(session, target: str, config, db_path, runner=subprocess.run
         raise FileNotFoundError(f"project directory no longer exists: {session.project_path}")
     export_path = export_session(session.session_id, handoff_dir, runner=runner)
     excerpt = handoff_excerpt(db_path, session.session_id)
-    summary = summarize(target, summary_request(excerpt, source.label), config, runner=runner)
+    summary = printable_summary(summarize(target, summary_request(excerpt, source.label), config, runner=runner))
     prompt = handoff_prompt(source.label, summary, export_path,
                             transcript_path(session, home or HOME), session.updated_at, now)
     launcher(fresh_argv(target, prompt, extra_args_for(target, config)),
