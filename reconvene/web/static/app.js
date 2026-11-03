@@ -33,10 +33,15 @@ function confirmLabel(agents, modal) {
     ? `Resume in ${target.label}` : `Hand off to ${target.label}`;
 }
 
+// True from the handoff request until it settles. Unlike dataset.working it survives a modal
+// reset, so the modal cannot be closed and reopened to fire a second handoff.
+let handoffInFlight = false;
+
 // While a handoff request is in flight (dataset.working) the button is busy and the switch
 // is locked, so the label and target cannot change under the pending request.
 function refreshConfirmButton(agents, modal) {
   const button = document.getElementById("modalConfirm");
+  document.getElementById("modalCancel").disabled = handoffInFlight;
   const working = modal.dataset.working === "1";
   const target = agents.find((a) => a.name === modal.dataset.agent);
   button.disabled = working;
@@ -235,6 +240,7 @@ async function handOff(modal) {
   let agents = null;
   try {
     agents = await loadAgents();
+    handoffInFlight = true;
     modal.dataset.working = "1";
     renderAgentSwitch(agents);
     const res = await fetch(`/api/resume/${modal.dataset.sessionId}`, agentRequestBody(modal.dataset.agent));
@@ -247,6 +253,7 @@ async function handOff(modal) {
     errorEl.textContent = `Couldn't hand off: ${err.message}`;
     errorEl.classList.remove("hidden");
   } finally {
+    handoffInFlight = false;
     delete modal.dataset.working;
     if (agents) renderAgentSwitch(agents);
   }
@@ -263,7 +270,10 @@ document.getElementById("modalConfirm").addEventListener("click", () => {
   resumeProject(sessionId, agent);
 });
 
-document.getElementById("modalCancel").addEventListener("click", hideConfirmModal);
+document.getElementById("modalCancel").addEventListener("click", () => {
+  if (handoffInFlight) return;
+  hideConfirmModal();
+});
 
 // --- search -----------------------------------------------------------------
 const searchBox = document.getElementById("searchBox");

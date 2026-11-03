@@ -575,3 +575,26 @@ def test_agents_fetch_is_retried_after_a_failure(page, e2e_server_with_handoff, 
     page.locator("#modalCancel").click()
     page.locator(".project").click()
     page.locator('#modalAgentSwitch button[data-agent="codex"]').wait_for()
+
+
+def test_cancel_is_disabled_while_handoff_is_in_flight(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, handoffs, hold = e2e_server_with_handoff
+    hold["release"] = threading.Event()
+    _open_mixed_modal(page, base_url, ccrider_db)
+
+    page.locator('#modalAgentSwitch button[data-agent="claude"]').click()
+    page.locator("#modalConfirm").click()
+    page.locator("#modalConfirm", has_text="Summarizing with Claude…").wait_for()
+    cancel = page.locator("#modalCancel")
+    assert cancel.is_disabled()
+    cancel.click(force=True)
+    page.wait_for_timeout(200)
+    assert page.locator("#confirmModal.hidden").count() == 0
+    assert len(handoffs) == 1
+
+    hold["release"].set()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    page.locator(".project").click()
+    assert not page.locator("#modalCancel").is_disabled()
+    page.locator("#modalCancel").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
