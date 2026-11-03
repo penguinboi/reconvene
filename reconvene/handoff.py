@@ -102,7 +102,8 @@ def export_session(session_id: str, dest_dir: Path, runner=subprocess.run) -> Pa
     path = dest_dir / f"{session_id}.md"
     try:
         proc = runner(["ccrider", "export", session_id, "--output", str(path), "--force"],
-                      capture_output=True, text=True, timeout=EXPORT_TIMEOUT_SECONDS)
+                      capture_output=True, text=True, stdin=subprocess.DEVNULL,
+                      timeout=EXPORT_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         raise RuntimeError(
             f"ccrider could not export the session: timed out after {EXPORT_TIMEOUT_SECONDS}s"
@@ -121,7 +122,8 @@ def summarize(name: str, prompt: str, config, runner=subprocess.run,
         output_file = Path(scratch) / "summary.txt"
         argv = headless_argv(name, prompt, str(output_file))
         try:
-            proc = runner(argv, capture_output=True, text=True, env=env, timeout=timeout,
+            proc = runner(argv, capture_output=True, text=True, stdin=subprocess.DEVNULL, env=env,
+                          timeout=timeout,
                           cwd=tempfile.gettempdir())
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"{label} could not write the summary: timed out after {timeout}s") from None

@@ -324,3 +324,10 @@ def test_export_session_keeps_transcripts_private(tmp_path):
     path = export_session("abc", dest, runner=FakeRunner())
     assert dest.stat().st_mode & 0o777 == 0o700
     assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_summarize_and_export_never_read_inherited_stdin(tmp_path):
+    runner = FakeRunner()
+    summarize("claude", "P", Config(), runner=runner)
+    export_session("abc", tmp_path / "h", runner=runner)
+    assert [c[1]["stdin"] for c in runner.calls] == [subprocess.DEVNULL, subprocess.DEVNULL]

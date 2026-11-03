@@ -62,13 +62,13 @@ def test_fresh_argv_each_agent():
 
 def test_headless_argv_each_agent():
     assert headless_argv("claude", "hi", "/o") == [
-        "claude", "-p", "--model", MODEL, "--no-session-persistence", "--tools", "", "hi",
+        "claude", "-p", "--model", MODEL, "--no-session-persistence", "--tools=", "hi",
     ]
     assert headless_argv("codex", "hi", "/o") == [
         "codex", "exec", "--ephemeral", "--skip-git-repo-check", "-s", "read-only", "-o", "/o", "hi",
     ]
     assert headless_argv("antigravity", "hi", "/o") == [
-        "agy", "-p", "--mode", "plan", "--sandbox", "hi",
+        "agy", "--mode", "plan", "--sandbox", "-p", "hi",
     ]
 
 
