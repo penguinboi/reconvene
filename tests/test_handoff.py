@@ -1,6 +1,7 @@
 # ABOUTME: Tests for the handoff engine: excerpt, summary request, export, summarize, and perform_handoff.
 # ABOUTME: Every process boundary (ccrider, agents, osascript) is an injected fake; nothing real runs.
 import shlex
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -106,6 +107,14 @@ def test_export_session_argv(tmp_path):
     argv, kwargs = runner.calls[0]
     assert argv == ["ccrider", "export", "abc", "--output", str(dest / "abc.md"), "--force"]
     assert kwargs["timeout"] > 0
+
+
+def test_export_session_makes_an_existing_folder_private(tmp_path):
+    dest = tmp_path / "handoffs"
+    dest.mkdir(mode=0o755)
+    dest.chmod(0o755)
+    export_session("abc", dest, runner=FakeRunner())
+    assert stat.S_IMODE(dest.stat().st_mode) == 0o700
 
 
 def test_summarize_runs_in_temp_dir_without_extra_args():

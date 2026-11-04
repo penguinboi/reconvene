@@ -108,7 +108,7 @@ def test_ensure_recaps_surfaces_llm_failure_and_does_not_cache_the_degraded_resu
 def test_claude_runner_runs_in_neutral_cwd(monkeypatch):
     captured = {}
 
-    def fake_run(cmd, capture_output, text, env, timeout, cwd):
+    def fake_run(cmd, capture_output, text, env, timeout, cwd, stdin):
         captured["cwd"] = cwd
         captured["env"] = env
         class Result:
@@ -143,7 +143,7 @@ def test_excerpt_handles_empty_string():
 def test_claude_runner_sets_api_key_when_configured(monkeypatch):
     captured = {}
 
-    def fake_run(cmd, capture_output, text, env, timeout, cwd):
+    def fake_run(cmd, capture_output, text, env, timeout, cwd, stdin):
         captured["env"] = env
         class Result:
             returncode = 0
@@ -161,7 +161,7 @@ def test_claude_runner_strips_inherited_api_key_in_cli_mode(monkeypatch):
     # API account per-token instead -- so it must be stripped from the child env.
     captured = {}
 
-    def fake_run(cmd, capture_output, text, env, timeout, cwd):
+    def fake_run(cmd, capture_output, text, env, timeout, cwd, stdin):
         captured["env"] = env
         class Result:
             returncode = 0
@@ -247,3 +247,136 @@ def test_claude_env_api_key_mode_sets_key(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-inherited")
     env = claude_env(Config(recap_auth_mode="api_key", api_key="sk-test"))
     assert env["ANTHROPIC_API_KEY"] == "sk-test"
+
+
+def _seed_first_message_cases(db):
+    from tests.conftest import add_session, add_message
+    import sqlite3
+    ids = []
+
+    def session(sid):
+        add_session(db, sid, "/Users/x/Code/p", "2026-07-08 10:00:00")
+        ids.append(sid)
+
+    session("plain")
+    add_message(db, "plain", "assistant", "hello", sequence=1)
+    add_message(db, "plain", "user", "first ask", sequence=2)
+    add_message(db, "plain", "user", "second ask", sequence=3)
+
+    session("late-user")
+    for i in range(1, 41):
+        add_message(db, "late-user", "assistant", f"a{i}", sequence=i)
+    add_message(db, "late-user", "user", "too late", sequence=41)
+
+    session("user-at-40")
+    for i in range(1, 40):
+        add_message(db, "user-at-40", "assistant", f"a{i}", sequence=i)
+    add_message(db, "user-at-40", "user", "just in time", sequence=40)
+
+    session("sidechain-first")
+    add_message(db, "sidechain-first", "user", "side ask", sequence=1, is_sidechain=1)
+    add_message(db, "sidechain-first", "user", "main ask", sequence=2)
+
+    session("sidechain-fills-window")
+    for i in range(1, 50):
+        add_message(db, "sidechain-fills-window", "assistant", f"s{i}", sequence=i, is_sidechain=1)
+    add_message(db, "sidechain-fills-window", "user", "after sidechains", sequence=50)
+
+    session("empty-bodies")
+    add_message(db, "empty-bodies", "user", "", sequence=1)
+    add_message(db, "empty-bodies", "user", "   \n ", sequence=2)
+    add_message(db, "empty-bodies", "user", "real body", sequence=3)
+
+    session("empty-text-falls-back-to-content")
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "INSERT INTO messages(session_id,type,sender,content,text_content,is_sidechain,sequence)"
+        " VALUES((SELECT id FROM sessions WHERE session_id='empty-text-falls-back-to-content'),"
+        "'user','human','from content','',0,1)"
+    )
+    conn.commit()
+    conn.close()
+
+    session("type-variants")
+    add_message(db, "type-variants", "assistant", "hi", sequence=1)
+    add_message(db, "type-variants", "User", "Capital User", sequence=2)
+
+    session("lowercase-type")
+    add_message(db, "lowercase-type", "user", "lower", sequence=1)
+
+    session("multi-line")
+    add_message(db, "multi-line", "user", "line one\nline two\n\nline three", sequence=1)
+
+    session("long")
+    add_message(db, "long", "user", "x" * 300, sequence=1)
+
+    session("no-user")
+    add_message(db, "no-user", "assistant", "only me", sequence=1)
+
+    session("no-messages")
+
+    ids.append("not-in-db")
+    return ids
+
+
+def test_first_user_messages_matches_per_session_lookup(ccrider_db):
+    from reconvene.recap import first_user_message, first_user_messages
+    ids = _seed_first_message_cases(ccrider_db)
+    assert first_user_messages(ccrider_db, ids) == {
+        sid: first_user_message(ccrider_db, sid) for sid in ids
+    }
+
+
+def test_first_user_messages_respects_limit(ccrider_db):
+    from reconvene.recap import first_user_message, first_user_messages
+    ids = _seed_first_message_cases(ccrider_db)
+    assert first_user_messages(ccrider_db, ids, limit=25) == {
+        sid: first_user_message(ccrider_db, sid, limit=25) for sid in ids
+    }
+
+
+def test_first_user_messages_known_values(ccrider_db):
+    from reconvene.recap import first_user_messages
+    ids = _seed_first_message_cases(ccrider_db)
+    got = first_user_messages(ccrider_db, ids)
+    assert got["late-user"] == ""
+    assert got["user-at-40"] == "just in time"
+    assert got["sidechain-first"] == "main ask"
+    assert got["sidechain-fills-window"] == "after sidechains"
+    assert got["empty-bodies"] == "real body"
+    assert got["empty-text-falls-back-to-content"] == "from content"
+    assert got["multi-line"] == "line one line two  line three"
+    assert got["not-in-db"] == ""
+    assert got["no-messages"] == ""
+
+
+def test_first_user_messages_handles_more_ids_than_sqlite_variable_limit(ccrider_db):
+    from reconvene.recap import first_user_messages
+    ids = _seed_first_message_cases(ccrider_db)
+    padded = ids + [f"missing-{i}" for i in range(2500)]
+    got = first_user_messages(ccrider_db, padded)
+    assert len(got) == len(padded)
+    assert got["plain"] == "first ask"
+
+
+def test_first_user_messages_empty_input(ccrider_db):
+    from reconvene.recap import first_user_messages
+    assert first_user_messages(ccrider_db, []) == {}
+
+
+def test_claude_runner_disables_tools_and_closes_stdin(monkeypatch):
+    import subprocess
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        class Result:
+            returncode = 0
+            stdout = "ONELINE: ok\nDETAIL: ok"
+        return Result()
+
+    monkeypatch.setattr("reconvene.recap.subprocess.run", fake_run)
+    claude_runner("a prompt", Config(), model="m")
+    assert captured["cmd"] == ["claude", "-p", "--model", "m", "--tools=", "a prompt"]
+    assert captured["kwargs"]["stdin"] == subprocess.DEVNULL

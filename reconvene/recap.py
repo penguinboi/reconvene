@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .constants import MODEL, RECAP_CACHE_DB, RECAP_CONCURRENCY, RECENT_SESSIONS_FOR_RECAP
-from .db import session_messages
+from .db import first_user_bodies, session_messages
 
 
 def signature(sessions) -> str:
@@ -142,6 +142,14 @@ def first_user_message(db_path, session_id, limit=90) -> str:
     return first_user.replace("\n", " ").strip()[:limit]
 
 
+def first_user_messages(db_path, session_ids, limit=90) -> dict[str, str]:
+    # Same result as first_user_message per id, over one connection.
+    return {
+        sid: body.replace("\n", " ").strip()[:limit]
+        for sid, body in first_user_bodies(db_path, session_ids).items()
+    }
+
+
 def derive_recap(project, db_path) -> tuple[str, str]:
     oneline = first_user_message(db_path, project.latest.session_id) or "(no recap)"
     return oneline, oneline
@@ -161,8 +169,8 @@ def claude_env(config) -> dict:
 def claude_runner(prompt, config, model=MODEL, timeout=120) -> str:
     env = claude_env(config)
     proc = subprocess.run(
-        ["claude", "-p", "--model", model, prompt],
-        capture_output=True, text=True, env=env, timeout=timeout,
+        ["claude", "-p", "--model", model, "--tools=", prompt],  # no tools: the prompt holds other sessions' text
+        capture_output=True, text=True, env=env, timeout=timeout, stdin=subprocess.DEVNULL,
         cwd=tempfile.gettempdir(),  # not the user's launch cwd — keeps this call out of their project history
     )
     if proc.returncode != 0:

@@ -13,10 +13,21 @@ from ..cluster import TopicAuthError, TopicCache, load_topic_lookup, organize, u
 from ..config import save_config
 from ..db import find_session, load_sessions
 from ..journal import abbreviate_home, build_journal, build_settings_projects, recency_bucket, relative_time
-from ..recap import RecapCache, ensure_recaps, ensure_session_recap, excerpt, first_user_message
+from ..recap import RecapCache, ensure_recaps, ensure_session_recap, excerpt, first_user_message, first_user_messages
 from ..search import search_sessions
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+REQUEST_READ_TIMEOUT_SECONDS = 5
+
+
+def _json_object(body: bytes) -> dict:
+    try:
+        data = json.loads(body)
+    except ValueError:  # JSONDecodeError and bad UTF-8 both subclass ValueError
+        data = None
+    if not isinstance(data, dict):
+        raise ValueError("request body must be a JSON object")
+    return data
 
 
 def _redacted_config(config):
@@ -61,6 +72,8 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
         return build_journal(sessions, config, topic_lookup=load_topic_lookup(cache_path))
 
     class Handler(BaseHTTPRequestHandler):
+        timeout = REQUEST_READ_TIMEOUT_SECONDS  # socket timeout, so a stalled client frees its thread
+
         def log_message(self, format, *args):
             pass  # keep test/CLI output quiet
 
@@ -166,13 +179,14 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 if project is None:
                     self._send_json(404, {"error": f"no project named {name!r}"})
                     return
+                first_msgs = first_user_messages(db_path, [s.session_id for s in project.sessions])
                 self._send_json(200, {"sessions": [
                     {
                         "session_id": s.session_id,
                         "updated_at": s.updated_at,
                         "relative": relative_time(s.updated_at),
                         "message_count": s.message_count,
-                        "first_msg": first_user_message(db_path, s.session_id),
+                        "first_msg": first_msgs[s.session_id],
                         "provider": s.provider,
                         "agent_label": agent_label(s.provider),
                         "resumable": is_supported(s.provider),
@@ -224,8 +238,18 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 self._forbidden()
                 return
             path = urlparse(self.path).path
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length) if length else b"{}"
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                length = -1
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            try:
+                body = self.rfile.read(length) if length else b"{}"
+            except TimeoutError:
+                self._send_json(400, {"error": "request body was not fully sent"})
+                return
             if path.startswith("/api/resume/"):
                 session_id = path[len("/api/resume/"):]
                 match = find_session(db_path, session_id)
@@ -233,7 +257,14 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                     self._send_json(404, {"error": f"no session {session_id!r}"})
                     return
                 # A missing or empty body means a native resume (the search page posts none).
-                target = json.loads(body).get("agent") if body.strip() else None
+                try:
+                    target = _json_object(body).get("agent") if body.strip() else None
+                except ValueError as e:
+                    self._send_json(400, {"error": str(e)})
+                    return
+                if target is not None and not isinstance(target, str):
+                    self._send_json(400, {"error": "agent must be a string"})
+                    return
                 if target is None or target == match.provider:
                     try:
                         require_resumable(match.provider)
@@ -258,7 +289,11 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 self._send_json(200, {"status": "handed_off" if handing_off else "resumed"})
                 return
             if path == "/api/settings":
-                data = json.loads(body)
+                try:
+                    data = _json_object(body)
+                except ValueError as e:
+                    self._send_json(400, {"error": str(e)})
+                    return
                 config.bot_names = set(data.get("bot_names", []))
                 config.hidden_names = set(data.get("hidden_names", []))
                 config.hidden_path_substrings = set(data.get("hidden_path_substrings", []))
