@@ -398,7 +398,8 @@ function showSessionModal(hit) {
   modal.dataset.sessionId = hit.session_id;
   modal.dataset.projectName = hit.project;
   document.getElementById("modalSessions").innerHTML = "";
-  clearAgentSwitch(); // a search hit carries no agent, so it resumes natively
+  clearAgentSwitch();
+  selectSessionAgent(hit);
   modal.classList.remove("hidden");
   // Fetch the per-session recap and fill it in below the snippet (guard against a stale response if
   // the user has since opened a different session's modal).

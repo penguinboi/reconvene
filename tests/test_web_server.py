@@ -875,3 +875,18 @@ def test_resume_unsupported_provider_can_hand_off(agent_server, ccrider_db):
     assert _post_json(f"{base_url}/api/resume/cp1", {"agent": "claude"}) == (200, {"status": "handed_off"})
     assert handed_off == [("cp1", "copilot", "claude")]
     assert resumed == []
+
+
+def test_api_search_hits_carry_agent_fields(running_server, ccrider_db):
+    base_url, _, _ = running_server
+    add_session(ccrider_db, "cp9", "/Users/x/Code/netstuff", "2026-07-09 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp9", "user", "set up pihole dns blocking", sequence=1)
+    add_session(ccrider_db, "cx9", "/Users/x/Code/netstuff", "2026-07-08 00:00:00", provider="codex")
+    add_message(ccrider_db, "cx9", "user", "pihole upstream servers", sequence=1)
+    with urllib.request.urlopen(f"{base_url}/api/search?q=pihole") as resp:
+        data = json.loads(resp.read())
+    by_id = {h["session_id"]: h for h in data["results"]}
+    assert (by_id["cp9"]["provider"], by_id["cp9"]["agent_label"], by_id["cp9"]["resumable"]) == \
+        ("copilot", "Copilot", False)
+    assert (by_id["cx9"]["provider"], by_id["cx9"]["agent_label"], by_id["cx9"]["resumable"]) == \
+        ("codex", "Codex", True)

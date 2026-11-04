@@ -754,3 +754,33 @@ def test_modal_controls_stay_visible_above_a_long_session_list(page, e2e_server_
     assert "selected" in last.get_attribute("class")
     box = page.locator("#modalConfirm").bounding_box()
     assert box["y"] + box["height"] <= 700
+
+
+def test_search_result_modal_offers_the_agent_switch(page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, _, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cx_hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", provider="codex")
+    add_message(ccrider_db, "cx_hit", "user", "tune the synology nas raid", sequence=1)
+    page.goto(base_url)
+    page.fill("#searchBox", "synology")
+    page.locator(".search-hit").first.click()
+    page.locator("#modalAgentSwitch button").first.wait_for()
+    assert page.locator("#modalAgentSwitch button.selected").get_attribute("data-agent") == "codex"
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Codex"
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert resumed == ["cx_hit"]
+
+
+def test_search_result_for_unsupported_agent_hands_off(page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp_hit", "user", "tune the synology nas raid", sequence=1)
+    page.goto(base_url)
+    page.fill("#searchBox", "synology")
+    page.locator(".search-hit").first.click()
+    page.locator("#modalAgentSwitch button").first.wait_for()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert handoffs == [("cp_hit", "claude")]
+    assert resumed == []

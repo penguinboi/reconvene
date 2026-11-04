@@ -17,6 +17,7 @@ class SearchHit:
     message_count: int
     hits: int
     snippet: str
+    provider: str
 
 
 def sanitize_query(query: str) -> str:
@@ -35,7 +36,7 @@ def search_sessions(db_path, query, limit=30) -> list[SearchHit]:
     try:
         try:
             counts = conn.execute(
-                "SELECT s.session_id, s.project_path, s.updated_at, s.message_count, "
+                "SELECT s.session_id, s.project_path, s.updated_at, s.message_count, s.provider, "
                 "count(*) AS hits, min(messages_fts.rowid) AS first_rowid "
                 "FROM messages_fts "
                 "JOIN messages m ON m.id = messages_fts.rowid "
@@ -53,7 +54,7 @@ def search_sessions(db_path, query, limit=30) -> list[SearchHit]:
                 ).fetchone()
                 hits.append(SearchHit(
                     r["session_id"], r["project_path"], r["updated_at"],
-                    r["message_count"] or 0, r["hits"], snip,
+                    r["message_count"] or 0, r["hits"], snip, r["provider"],
                 ))
         except sqlite3.OperationalError as e:
             if "messages_fts" in str(e):
