@@ -126,6 +126,10 @@ function clearAgentSwitch() {
   document.getElementById("modalError").classList.add("hidden");
 }
 
+// Bumped each time a modal opens, so a session list that arrives after the user has moved on to
+// another window is dropped instead of being appended to the wrong one.
+let sessionListRequest = 0;
+
 function showConfirmModal(project) {
   // Resume defaults to the latest session. A loose/topic group aggregates unrelated sessions, so
   // its latest may not be the one wanted -- those always show the full picker to override it.
@@ -139,10 +143,11 @@ function showConfirmModal(project) {
   const list = document.getElementById("modalSessions");
   list.innerHTML = "";
   clearAgentSwitch();
+  const request = ++sessionListRequest;
   fetch(`/api/sessions/${encodeURIComponent(project.name)}`)
     .then((r) => r.json())
     .then((data) => {
-      if (!data.sessions) return;
+      if (request !== sessionListRequest || !data.sessions) return;
       const current = data.sessions.find((s) => s.session_id === modal.dataset.sessionId);
       if (current) selectSessionAgent(current);
       if (!isGroup && data.sessions.length < 2) return; // one session, real project: nothing to pick
@@ -400,6 +405,7 @@ function showSessionModal(hit) {
   modal.dataset.sessionId = hit.session_id;
   modal.dataset.projectName = hit.project;
   document.getElementById("modalSessions").innerHTML = "";
+  sessionListRequest++; // a project window's list still in flight must not land in this one
   clearAgentSwitch();
   selectSessionAgent(hit);
   modal.classList.remove("hidden");

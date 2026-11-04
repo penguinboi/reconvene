@@ -756,6 +756,29 @@ def test_modal_controls_stay_visible_above_a_long_session_list(page, e2e_server_
     assert box["y"] + box["height"] <= 700
 
 
+def test_late_session_list_does_not_land_in_a_different_projects_window(page, e2e_server, ccrider_db):
+    base_url, _, _, _ = e2e_server
+    for name in ("alpha", "beta"):
+        for i in range(2):
+            add_session(ccrider_db, f"{name}{i}", f"/Users/x/Code/{name}", f"2026-07-08 00:0{i}:00")
+            add_message(ccrider_db, f"{name}{i}", "user", f"{name} task {i}", sequence=1)
+    held = []
+    page.route("**/api/sessions/alpha", lambda route: held.append(route))
+    page.goto(base_url)
+    page.locator(".project", has_text="alpha").click()
+    while not held:
+        page.wait_for_timeout(20)
+    page.locator("#modalCancel").click()
+    page.locator(".project", has_text="beta").click()
+    page.locator(".session-row", has_text="beta task 0").wait_for()
+
+    with page.expect_response("**/api/sessions/alpha"):
+        held[0].continue_()
+    page.wait_for_timeout(100)  # let the late response's handler run
+    assert page.locator(".session-row", has_text="alpha task").count() == 0
+    assert page.locator(".session-row").count() == 2
+
+
 def test_search_result_modal_offers_the_agent_switch(page, e2e_server_with_handoff, ccrider_db):
     base_url, resumed, _, _ = e2e_server_with_handoff
     add_session(ccrider_db, "cx_hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", provider="codex")
