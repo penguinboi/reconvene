@@ -728,3 +728,29 @@ def test_reloading_the_journal_drops_recap_fetches_queued_for_old_cards(page, tm
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_modal_controls_stay_visible_above_a_long_session_list(page, e2e_server_with_handoff, ccrider_db):
+    # A group can hold hundreds of sessions. The list scrolls inside the modal so the Open-in
+    # switch and the Resume/Cancel buttons stay on screen without scrolling.
+    base_url, _, _, _ = e2e_server_with_handoff
+    for i in range(80):
+        add_session(ccrider_db, f"big{i}", "/Users/x/Code/big", f"2026-07-08 {i // 60:02d}:{i % 60:02d}:00")
+        add_message(ccrider_db, f"big{i}", "user", f"task {i}", sequence=1)
+    page.set_viewport_size({"width": 1200, "height": 700})
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator(".session-row").nth(79).wait_for(state="attached")
+    page.locator("#modalAgentSwitch button").first.wait_for()
+
+    for selector in ("#modalConfirm", "#modalCancel", "#modalAgentSwitch"):
+        box = page.locator(selector).bounding_box()
+        assert box is not None and 0 <= box["y"] and box["y"] + box["height"] <= 700, selector
+    assert page.locator(".modal-content").evaluate("el => el.scrollTop") == 0
+
+    last = page.locator(".session-row").nth(79)
+    last.scroll_into_view_if_needed()
+    last.click()
+    assert "selected" in last.get_attribute("class")
+    box = page.locator("#modalConfirm").bounding_box()
+    assert box["y"] + box["height"] <= 700

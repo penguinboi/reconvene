@@ -293,8 +293,22 @@ table td, table th {
   padding: 1.5rem;
   max-width: 640px;
   max-height: 80vh;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* The recap and session list scroll; the title and the actions below them stay on screen, so
+   a group with hundreds of sessions never pushes the Open-in switch and buttons out of reach. */
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.modal-actions {
+  flex: 0 0 auto;
+  padding-top: 0.75rem;
 }
 
 .modal-content p {
