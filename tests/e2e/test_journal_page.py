@@ -754,3 +754,33 @@ def test_modal_controls_stay_visible_above_a_long_session_list(page, e2e_server_
     assert "selected" in last.get_attribute("class")
     box = page.locator("#modalConfirm").bounding_box()
     assert box["y"] + box["height"] <= 700
+
+
+def test_long_recap_does_not_push_session_rows_out_of_view(page, tmp_path, ccrider_db):
+    # A 600-word recap used to fill the whole modal body, so the session rows started below the
+    # fold. The recap gets its own capped, scrollable box and the first rows stay on screen.
+    for i in range(30):
+        add_session(ccrider_db, f"long{i}", "/Users/x/Code/longrecap", f"2026-07-08 00:{i:02d}:00")
+        add_message(ccrider_db, f"long{i}", "user", f"task {i}", sequence=1)
+    paragraph = "This paragraph describes a long stretch of work on the project in detail. " * 6
+    long_detail = "\n".join([paragraph] * 12)
+
+    def long_recap_runner(prompt):
+        return f"ONELINE: short line\nDETAIL: {long_detail}"
+
+    server, base_url = _start_server_with_recap_runner(tmp_path, ccrider_db, long_recap_runner)
+    try:
+        page.set_viewport_size({"width": 1200, "height": 700})
+        page.goto(base_url)
+        page.locator(".project .meta", has_text="long stretch of work").wait_for()
+        page.locator(".project").click()
+        page.locator(".session-row").first.wait_for()
+
+        body = page.locator(".modal-body").bounding_box()
+        first_row = page.locator(".session-row").first.bounding_box()
+        assert first_row["y"] + first_row["height"] <= body["y"] + body["height"]
+        assert page.locator(".modal-body").evaluate("el => el.scrollTop") == 0
+        recap = page.locator("#modalFullRecap")
+        assert recap.evaluate("el => el.scrollHeight > el.clientHeight")  # the rest scrolls in place
+    finally:
+        server.shutdown()
