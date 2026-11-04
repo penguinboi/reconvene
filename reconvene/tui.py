@@ -162,6 +162,16 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
         _preview_command(db_path, cache_path, config_path, session=True), header=SESSION_HEADER)
     active_search_picker = search_picker or _make_fzf_search_picker(db_path, cache_path, config_path)
 
+    def _resume(session) -> int:
+        try:
+            resumer(session, config)
+        except ValueError as e:
+            # An agent reconvene can't resume (e.g. Copilot). Handoff lives in the web page only.
+            print(f"reconvene: {e}. Run reconvene and choose Web view to hand it off.",
+                  file=sys.stderr)
+            return 1
+        return 0
+
     def _run_search(query) -> int | None:
         # Returns 0 if a session was resumed, None to fall back to the project view.
         s_chosen = active_search_picker(query)
@@ -171,8 +181,7 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
         session = all_by_sid.get(sid)
         if session is None:
             return None
-        resumer(session, config)
-        return 0
+        return _resume(session)
 
     if initial_search is not None:
         result = _run_search(initial_search)
@@ -207,7 +216,5 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
             session = next((s for s in project.sessions if s.session_id == sid), None)
             if session is None:
                 continue
-            resumer(session, config)
-            return 0
-        resumer(project.latest, config)
-        return 0
+            return _resume(session)
+        return _resume(project.latest)

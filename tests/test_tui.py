@@ -4,6 +4,7 @@ from reconvene.config import Config
 from reconvene.db import Session
 from reconvene.journal import Project
 from reconvene import tui
+from reconvene.resume import exec_resume
 from tests.conftest import add_session, add_message
 
 
@@ -356,3 +357,21 @@ def test_key_hint_headers_name_the_bindings():
     assert "ctrl-s" in tui.PROJECT_HEADER and "ctrl-f" in tui.PROJECT_HEADER and "enter" in tui.PROJECT_HEADER
     assert "esc" in tui.SESSION_HEADER and "enter" in tui.SESSION_HEADER
     assert "search" in tui.SEARCH_HEADER
+
+
+def test_run_tui_unsupported_agent_prints_message_instead_of_traceback(tmp_path, ccrider_db, capsys):
+    add_session(ccrider_db, "c1", "/Users/x/Code/myproject", "2026-07-08 00:00:00", provider="copilot")
+    add_message(ccrider_db, "c1", "user", "fix the build", sequence=1)
+    launched = []
+    rc = tui.run_tui(
+        Config(recap_auth_mode="none"), str(ccrider_db), str(tmp_path / "r.db"), str(tmp_path / "c.json"),
+        picker=lambda lines: ("", lines[0]),
+        resumer=lambda s, config: exec_resume(s, config, path_exists=lambda p: True,
+                                              chdir=lambda p: None,
+                                              execvp=lambda *a: launched.append(a)),
+    )
+    assert rc == 1
+    assert launched == []
+    err = capsys.readouterr().err
+    assert "reconvene: reconvene can't resume Copilot sessions" in err
+    assert "Traceback" not in err
