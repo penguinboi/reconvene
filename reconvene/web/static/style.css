@@ -359,6 +359,9 @@ table td, table th {
   border-radius: 8px;
   color: var(--text-muted);
 }
+.agent-unknown {
+  border-style: dashed;
+}
 .agent-switch {
   display: flex;
   align-items: center;

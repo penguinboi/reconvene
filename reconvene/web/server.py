@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from ..agents import AGENTS, get_agent, installed_agents
+from ..agents import AGENTS, agent_label, installed_agents, is_supported, require_resumable
 from ..classify import canonical_name
 from ..cluster import TopicAuthError, TopicCache, load_topic_lookup, organize, unassigned_loose_sessions
 from ..config import save_config
@@ -174,7 +174,8 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                         "message_count": s.message_count,
                         "first_msg": first_user_message(db_path, s.session_id),
                         "provider": s.provider,
-                        "agent_label": get_agent(s.provider).label,
+                        "agent_label": agent_label(s.provider),
+                        "resumable": is_supported(s.provider),
                     }
                     for s in project.sessions
                 ]})
@@ -233,6 +234,12 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                     return
                 # A missing or empty body means a native resume (the search page posts none).
                 target = json.loads(body).get("agent") if body.strip() else None
+                if target is None or target == match.provider:
+                    try:
+                        require_resumable(match.provider)
+                    except ValueError as e:
+                        self._send_json(400, {"error": str(e)})
+                        return
                 if target is not None and target not in AGENTS:
                     self._send_json(400, {"error": f"unknown agent {target!r}"})
                     return

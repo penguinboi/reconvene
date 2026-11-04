@@ -6,7 +6,7 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-from .agents import extra_args_for, fresh_argv, get_agent, headless_argv, transcript_path
+from .agents import agent_label, extra_args_for, fresh_argv, get_agent, headless_argv, transcript_path
 from .constants import HANDOFF_DIR, HOME
 from .db import session_messages
 from .recap import claude_env
@@ -144,15 +144,15 @@ def perform_handoff(session, target: str, config, db_path, runner=subprocess.run
                     launcher=launch_in_terminal, path_exists=os.path.isdir, home: Path | None = None,
                     handoff_dir: Path = HANDOFF_DIR, now: datetime | None = None) -> None:
     get_agent(target)
-    source = get_agent(session.provider)
+    source_label = agent_label(session.provider)
     if target == session.provider:
-        raise ValueError(f"session already belongs to {source.label}; pick a different agent")
+        raise ValueError(f"session already belongs to {source_label}; pick a different agent")
     if not path_exists(session.project_path):
         raise FileNotFoundError(f"project directory no longer exists: {session.project_path}")
     export_path = export_session(session.session_id, handoff_dir, runner=runner)
     excerpt = handoff_excerpt(db_path, session.session_id)
-    summary = printable_summary(summarize(target, summary_request(excerpt, source.label), config, runner=runner))
-    prompt = handoff_prompt(source.label, summary, export_path,
+    summary = printable_summary(summarize(target, summary_request(excerpt, source_label), config, runner=runner))
+    prompt = handoff_prompt(source_label, summary, export_path,
                             transcript_path(session, home or HOME), session.updated_at, now)
     launcher(fresh_argv(target, prompt, extra_args_for(target, config)),
              session.project_path, config, runner=runner)

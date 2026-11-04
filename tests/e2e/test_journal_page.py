@@ -645,6 +645,44 @@ def test_native_resume_network_failure_is_shown(page, e2e_server_with_handoff, c
     assert "Couldn't resume" in error.inner_text()
 
 
+def test_unsupported_provider_session_defaults_to_handoff_to_first_installed_agent(
+        page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_only", "/Users/x/Code/copilotproj", "2026-07-09 00:00:00",
+                message_count=4, provider="copilot")
+    add_message(ccrider_db, "cp_only", "user", "copilot work", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#modalAgentSwitch button").first.wait_for()
+
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    assert not page.locator("#modalConfirm").is_disabled()
+    assert page.locator('#modalAgentSwitch button.selected').get_attribute("data-agent") == "claude"
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert handoffs == [("cp_only", "claude")]
+    assert resumed == []
+
+
+def test_unsupported_provider_badge_is_labelled_and_unknown_styled(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_old", "/Users/x/Code/mixedcp", "2026-07-08 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp_old", "user", "older copilot", sequence=1)
+    add_session(ccrider_db, "cx_new", "/Users/x/Code/mixedcp", "2026-07-09 00:00:00", provider="codex")
+    add_message(ccrider_db, "cx_new", "user", "newer codex", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator(".session-row").first.wait_for()
+
+    badge = page.locator(".session-row", has_text="older copilot").locator(".agent-badge")
+    assert badge.inner_text() == "Copilot"
+    assert "agent-unknown" in badge.get_attribute("class")
+    page.locator(".session-row", has_text="older copilot").click()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    page.locator(".session-row", has_text="newer codex").click()
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Codex"
+
+
 def test_picker_is_not_queued_behind_recap_fetches(page, tmp_path, ccrider_db):
     # Each card fetches its recap on load, and the browser opens at most 6 connections per host.
     # The picker's own requests must not wait behind every card's recap, or with a real journal
