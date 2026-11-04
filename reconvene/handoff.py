@@ -99,6 +99,7 @@ def handoff_prompt(from_label: str, summary: str, export_path: Path, transcript:
 def export_session(session_id: str, dest_dir: Path, runner=subprocess.run) -> Path:
     dest_dir = Path(dest_dir)
     dest_dir.mkdir(parents=True, exist_ok=True, mode=PRIVATE_DIR_MODE)
+    dest_dir.chmod(PRIVATE_DIR_MODE)  # mkdir's mode is masked by umask and ignored for an existing folder
     path = dest_dir / f"{session_id}.md"
     try:
         proc = runner(["ccrider", "export", session_id, "--output", str(path), "--force"],

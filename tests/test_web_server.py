@@ -1,5 +1,6 @@
 # ABOUTME: Tests for the local HTTP server — routes tested via real HTTP requests
 # ABOUTME: against a server instance running on a random free port in a background thread.
+import http.client
 import json
 import threading
 import urllib.request
@@ -8,7 +9,7 @@ from urllib.error import HTTPError
 import pytest
 
 from reconvene.config import Config
-from reconvene.web.server import serve
+from reconvene.web.server import REQUEST_READ_TIMEOUT_SECONDS, serve
 from tests.conftest import add_session, add_message
 
 
@@ -778,3 +779,53 @@ def test_settings_saves_agent_extra_args(agent_server):
         cfg = json.loads(resp.read())["config"]
     assert cfg["codex_extra_args"] == "--full-auto"
     assert cfg["antigravity_extra_args"] == "--yolo"
+
+
+def _raw_post(base_url, path, body=b"", content_length=None):
+    host, port = base_url[len("http://"):].split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=5)
+    try:
+        conn.putrequest("POST", path)
+        conn.putheader("Content-Length", str(len(body)) if content_length is None else content_length)
+        conn.endheaders(body)
+        resp = conn.getresponse()
+        return resp.status, json.loads(resp.read())
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("path", ["/api/resume/r1", "/api/settings"])
+@pytest.mark.parametrize("body", [b"{not json", b"[]", b'"x"', b"3", b"null", b"\xff\xfe"])
+def test_post_body_that_is_not_a_json_object_is_400(running_server, path, body):
+    base_url, resumed, _ = running_server
+    status, data = _raw_post(base_url, path, body)
+    assert status == 400
+    assert data == {"error": "request body must be a JSON object"}
+    assert resumed == []
+
+
+@pytest.mark.parametrize("path", ["/api/resume/r1", "/api/settings", "/api/topics/refresh"])
+@pytest.mark.parametrize("content_length", ["abc", "-5"])
+def test_post_with_invalid_content_length_is_400(running_server, path, content_length):
+    base_url, resumed, _ = running_server
+    status, data = _raw_post(base_url, path, b"", content_length=content_length)
+    assert status == 400
+    assert data == {"error": "invalid Content-Length"}
+    assert resumed == []
+
+
+def test_post_body_shorter_than_its_content_length_is_400_after_the_read_timeout(running_server):
+    # A client that promises more bytes than it sends must not hold a handler thread forever.
+    base_url, resumed, _ = running_server
+    host, port = base_url[len("http://"):].split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=REQUEST_READ_TIMEOUT_SECONDS + 5)
+    try:
+        conn.putrequest("POST", "/api/resume/r1")
+        conn.putheader("Content-Length", "100")
+        conn.endheaders(b"{}")
+        resp = conn.getresponse()
+        assert resp.status == 400
+        assert json.loads(resp.read()) == {"error": "request body was not fully sent"}
+    finally:
+        conn.close()
+    assert resumed == []

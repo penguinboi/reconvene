@@ -17,6 +17,17 @@ from ..recap import RecapCache, ensure_recaps, ensure_session_recap, excerpt, fi
 from ..search import search_sessions
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+REQUEST_READ_TIMEOUT_SECONDS = 5
+
+
+def _json_object(body: bytes) -> dict:
+    try:
+        data = json.loads(body)
+    except ValueError:  # JSONDecodeError and bad UTF-8 both subclass ValueError
+        data = None
+    if not isinstance(data, dict):
+        raise ValueError("request body must be a JSON object")
+    return data
 
 
 def _redacted_config(config):
@@ -61,6 +72,8 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
         return build_journal(sessions, config, topic_lookup=load_topic_lookup(cache_path))
 
     class Handler(BaseHTTPRequestHandler):
+        timeout = REQUEST_READ_TIMEOUT_SECONDS  # socket timeout, so a stalled client frees its thread
+
         def log_message(self, format, *args):
             pass  # keep test/CLI output quiet
 
@@ -223,8 +236,18 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 self._forbidden()
                 return
             path = urlparse(self.path).path
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length) if length else b"{}"
+            try:
+                length = int(self.headers.get("Content-Length", 0))
+            except ValueError:
+                length = -1
+            if length < 0:
+                self._send_json(400, {"error": "invalid Content-Length"})
+                return
+            try:
+                body = self.rfile.read(length) if length else b"{}"
+            except TimeoutError:
+                self._send_json(400, {"error": "request body was not fully sent"})
+                return
             if path.startswith("/api/resume/"):
                 session_id = path[len("/api/resume/"):]
                 match = find_session(db_path, session_id)
@@ -232,7 +255,11 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                     self._send_json(404, {"error": f"no session {session_id!r}"})
                     return
                 # A missing or empty body means a native resume (the search page posts none).
-                target = json.loads(body).get("agent") if body.strip() else None
+                try:
+                    target = _json_object(body).get("agent") if body.strip() else None
+                except ValueError as e:
+                    self._send_json(400, {"error": str(e)})
+                    return
                 if target is not None and target not in AGENTS:
                     self._send_json(400, {"error": f"unknown agent {target!r}"})
                     return
@@ -251,7 +278,11 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 self._send_json(200, {"status": "handed_off" if handing_off else "resumed"})
                 return
             if path == "/api/settings":
-                data = json.loads(body)
+                try:
+                    data = _json_object(body)
+                except ValueError as e:
+                    self._send_json(400, {"error": str(e)})
+                    return
                 config.bot_names = set(data.get("bot_names", []))
                 config.hidden_names = set(data.get("hidden_names", []))
                 config.hidden_path_substrings = set(data.get("hidden_path_substrings", []))
