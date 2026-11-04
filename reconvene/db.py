@@ -93,3 +93,45 @@ def session_messages(db_path, session_id, limit=40, newest=False) -> list[tuple[
         if body:
             out.append(((r["type"] or ""), body))
     return out
+
+
+_SQLITE_VARIABLE_CHUNK = 500
+
+
+def first_user_bodies(db_path, session_ids, limit=40) -> dict[str, str]:
+    # Batched equivalent of "first message whose type contains 'user' (any case) among
+    # session_messages(db_path, sid, limit)", over one connection. Every requested id gets a
+    # key; ids with no such message (or not in the DB) map to "". Bodies are fetched only for
+    # user-typed messages, since assistant bodies are large and never wanted.
+    session_ids = list(session_ids)
+    out = {sid: "" for sid in session_ids}
+    conn = _connect(db_path)
+    try:
+        for i in range(0, len(session_ids), _SQLITE_VARIABLE_CHUNK):
+            chunk = session_ids[i:i + _SQLITE_VARIABLE_CHUNK]
+            marks = ",".join("?" * len(chunk))
+            windowed = conn.execute(
+                "SELECT session_id, id, type FROM ("
+                "SELECT s.session_id AS session_id, m.id AS id, m.type AS type, "
+                "ROW_NUMBER() OVER (PARTITION BY m.session_id ORDER BY m.sequence) AS n "
+                "FROM messages m JOIN sessions s ON s.id = m.session_id "
+                f"WHERE s.session_id IN ({marks}) "
+                "AND (m.is_sidechain IS NULL OR m.is_sidechain=0)"
+                ") WHERE n <= ? ORDER BY session_id, n",
+                (*chunk, limit),
+            ).fetchall()
+            user_rows = [(r["session_id"], r["id"]) for r in windowed if "user" in (r["type"] or "").lower()]
+            for j in range(0, len(user_rows), _SQLITE_VARIABLE_CHUNK):
+                part = user_rows[j:j + _SQLITE_VARIABLE_CHUNK]
+                bodies = dict(conn.execute(
+                    "SELECT id, COALESCE(NULLIF(text_content,''), content) FROM messages "
+                    f"WHERE id IN ({','.join('?' * len(part))})",
+                    [message_id for _, message_id in part],
+                ))
+                for sid, message_id in part:
+                    body = (bodies[message_id] or "").strip()
+                    if body and not out[sid]:
+                        out[sid] = body
+    finally:
+        conn.close()
+    return out
