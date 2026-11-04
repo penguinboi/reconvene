@@ -305,3 +305,32 @@ def test_launch_in_terminal_raises_when_directory_missing(tmp_path):
         raise AssertionError("must not launch when the project directory is missing")
     with pytest.raises(FileNotFoundError, match="gone"):
         launch_in_terminal(["agy"], str(tmp_path / "gone"), runner=runner_should_not_run)
+
+
+# --- Unsupported providers ------------------------------------------------------
+
+CANT_RESUME = "reconvene can't resume Copilot sessions; hand it off to another agent instead"
+
+
+def test_resume_command_unsupported_provider_explains_handoff():
+    with pytest.raises(ValueError) as exc:
+        resume_command(make_session(provider="copilot"), now=NOW)
+    assert str(exc.value) == CANT_RESUME
+
+
+def test_open_terminal_and_resume_unsupported_provider_launches_nothing():
+    ran = []
+    with pytest.raises(ValueError) as exc:
+        open_terminal_and_resume(make_session(provider="copilot"), runner=lambda *a, **k: ran.append(a),
+                                 path_exists=lambda p: True, system="Darwin")
+    assert str(exc.value) == CANT_RESUME
+    assert ran == []
+
+
+def test_exec_resume_unsupported_provider_execs_nothing(tmp_path):
+    calls = []
+    with pytest.raises(ValueError) as exc:
+        exec_resume(make_session(cwd=str(tmp_path), provider="copilot"),
+                    chdir=lambda p: calls.append(p), execvp=lambda f, a: calls.append(f))
+    assert str(exc.value) == CANT_RESUME
+    assert calls == []

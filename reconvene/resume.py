@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from datetime import datetime
 
-from .agents import extra_args_for, get_agent, resume_argv
+from .agents import extra_args_for, get_agent, require_resumable, resume_argv
 from .journal import verbose_age
 
 # terminal_app values that name macOS apps — on Linux they mean "not configured", so we autodetect.
@@ -123,6 +123,7 @@ def launch_in_terminal(argv: list[str], cwd: str, config=None,
 
 def open_terminal_and_resume(session, config=None, now: datetime | None = None,
                              **launch_kwargs) -> None:
+    require_resumable(session.provider)
     argv = resume_command(session, extra_args_for(session.provider, config), now)
     launch_in_terminal(argv, session.project_path, config, **launch_kwargs)
 
@@ -133,6 +134,7 @@ def exec_resume(session, config=None,
     # project's directory. Unlike open_terminal_and_resume (which must spawn a window because the
     # web server keeps running), the TUI is a foreground process, so execvp gives the terminal
     # straight to the agent. Uses resume_command, the same argv the web path launches.
+    require_resumable(session.provider)
     if not path_exists(session.project_path):
         raise FileNotFoundError(f"project directory no longer exists: {session.project_path}")
     argv = resume_command(session, extra_args_for(session.provider, config))
