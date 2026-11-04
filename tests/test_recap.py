@@ -108,7 +108,7 @@ def test_ensure_recaps_surfaces_llm_failure_and_does_not_cache_the_degraded_resu
 def test_claude_runner_runs_in_neutral_cwd(monkeypatch):
     captured = {}
 
-    def fake_run(cmd, capture_output, text, env, timeout, cwd):
+    def fake_run(cmd, capture_output, text, env, timeout, cwd, stdin):
         captured["cwd"] = cwd
         captured["env"] = env
         class Result:
@@ -143,7 +143,7 @@ def test_excerpt_handles_empty_string():
 def test_claude_runner_sets_api_key_when_configured(monkeypatch):
     captured = {}
 
-    def fake_run(cmd, capture_output, text, env, timeout, cwd):
+    def fake_run(cmd, capture_output, text, env, timeout, cwd, stdin):
         captured["env"] = env
         class Result:
             returncode = 0
@@ -161,7 +161,7 @@ def test_claude_runner_strips_inherited_api_key_in_cli_mode(monkeypatch):
     # API account per-token instead -- so it must be stripped from the child env.
     captured = {}
 
-    def fake_run(cmd, capture_output, text, env, timeout, cwd):
+    def fake_run(cmd, capture_output, text, env, timeout, cwd, stdin):
         captured["env"] = env
         class Result:
             returncode = 0
@@ -362,3 +362,21 @@ def test_first_user_messages_handles_more_ids_than_sqlite_variable_limit(ccrider
 def test_first_user_messages_empty_input(ccrider_db):
     from reconvene.recap import first_user_messages
     assert first_user_messages(ccrider_db, []) == {}
+
+
+def test_claude_runner_disables_tools_and_closes_stdin(monkeypatch):
+    import subprocess
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["kwargs"] = kwargs
+        class Result:
+            returncode = 0
+            stdout = "ONELINE: ok\nDETAIL: ok"
+        return Result()
+
+    monkeypatch.setattr("reconvene.recap.subprocess.run", fake_run)
+    claude_runner("a prompt", Config(), model="m")
+    assert captured["cmd"] == ["claude", "-p", "--model", "m", "--tools=", "a prompt"]
+    assert captured["kwargs"]["stdin"] == subprocess.DEVNULL

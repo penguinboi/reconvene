@@ -1,6 +1,7 @@
 # ABOUTME: Tests for the handoff engine: excerpt, summary request, export, summarize, and perform_handoff.
 # ABOUTME: Every process boundary (ccrider, agents, osascript) is an injected fake; nothing real runs.
 import shlex
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -106,6 +107,14 @@ def test_export_session_argv(tmp_path):
     argv, kwargs = runner.calls[0]
     assert argv == ["ccrider", "export", "abc", "--output", str(dest / "abc.md"), "--force"]
     assert kwargs["timeout"] > 0
+
+
+def test_export_session_makes_an_existing_folder_private(tmp_path):
+    dest = tmp_path / "handoffs"
+    dest.mkdir(mode=0o755)
+    dest.chmod(0o755)
+    export_session("abc", dest, runner=FakeRunner())
+    assert stat.S_IMODE(dest.stat().st_mode) == 0o700
 
 
 def test_summarize_runs_in_temp_dir_without_extra_args():
@@ -331,3 +340,23 @@ def test_summarize_and_export_never_read_inherited_stdin(tmp_path):
     summarize("claude", "P", Config(), runner=runner)
     export_session("abc", tmp_path / "h", runner=runner)
     assert [c[1]["stdin"] for c in runner.calls] == [subprocess.DEVNULL, subprocess.DEVNULL]
+
+
+def test_handoff_from_unsupported_provider_names_it_and_omits_transcript(ccrider_db, tmp_path):
+    runner, launched, launcher = _handoff_env(ccrider_db, tmp_path, "SUMMARY TEXT")
+    perform_handoff(_session("copilot"), "claude", Config(), ccrider_db, runner=runner,
+                    launcher=launcher, path_exists=lambda p: True,
+                    home=tmp_path, handoff_dir=tmp_path / "h")
+    prompt = launched[0][0][-1]
+    assert "from a Copilot session" in prompt
+    assert "Raw Copilot transcript: not found" in prompt
+    assert "None" not in prompt
+
+
+def test_handoff_from_unsupported_provider_to_itself_is_rejected(ccrider_db, tmp_path):
+    runner, launched, launcher = _handoff_env(ccrider_db, tmp_path)
+    with pytest.raises(ValueError):
+        perform_handoff(_session("copilot"), "copilot", Config(), ccrider_db, runner=runner,
+                        launcher=launcher, path_exists=lambda p: True,
+                        home=tmp_path, handoff_dir=tmp_path / "h")
+    assert runner.calls == []

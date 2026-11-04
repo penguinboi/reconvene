@@ -643,3 +643,88 @@ def test_native_resume_network_failure_is_shown(page, e2e_server_with_handoff, c
     error = page.locator("#error")
     error.wait_for(state="visible")
     assert "Couldn't resume" in error.inner_text()
+
+
+def test_unsupported_provider_session_defaults_to_handoff_to_first_installed_agent(
+        page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_only", "/Users/x/Code/copilotproj", "2026-07-09 00:00:00",
+                message_count=4, provider="copilot")
+    add_message(ccrider_db, "cp_only", "user", "copilot work", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator("#modalAgentSwitch button").first.wait_for()
+
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    assert not page.locator("#modalConfirm").is_disabled()
+    assert page.locator('#modalAgentSwitch button.selected').get_attribute("data-agent") == "claude"
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert handoffs == [("cp_only", "claude")]
+    assert resumed == []
+
+
+def test_unsupported_provider_badge_is_labelled_and_unknown_styled(page, e2e_server_with_handoff, ccrider_db):
+    base_url, _, _, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_old", "/Users/x/Code/mixedcp", "2026-07-08 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp_old", "user", "older copilot", sequence=1)
+    add_session(ccrider_db, "cx_new", "/Users/x/Code/mixedcp", "2026-07-09 00:00:00", provider="codex")
+    add_message(ccrider_db, "cx_new", "user", "newer codex", sequence=1)
+    page.goto(base_url)
+    page.locator(".project").click()
+    page.locator(".session-row").first.wait_for()
+
+    badge = page.locator(".session-row", has_text="older copilot").locator(".agent-badge")
+    assert badge.inner_text() == "Copilot"
+    assert "agent-unknown" in badge.get_attribute("class")
+    page.locator(".session-row", has_text="older copilot").click()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    page.locator(".session-row", has_text="newer codex").click()
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Codex"
+
+
+def test_picker_is_not_queued_behind_recap_fetches(page, tmp_path, ccrider_db):
+    # Each card fetches its recap on load, and the browser opens at most 6 connections per host.
+    # The picker's own requests must not wait behind every card's recap, or with a real journal
+    # (100+ projects) the session list and "Open in" switch show up tens of seconds late.
+    for i in range(36):
+        add_session(ccrider_db, f"s{i}", f"/Users/x/Code/project{i:02d}", f"2026-07-08 00:{i:02d}:00")
+        add_message(ccrider_db, f"s{i}", "user", f"task {i}", sequence=1)
+
+    def one_second_recap_runner(prompt):
+        time.sleep(1)
+        return "ONELINE: full recap text\nDETAIL: full recap text"
+
+    server, base_url = _start_server_with_recap_runner(tmp_path, ccrider_db, one_second_recap_runner)
+    try:
+        page.goto(base_url)
+        page.locator(".project").first.click()
+        page.locator("#modalAgentSwitch button").first.wait_for(timeout=2000)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_reloading_the_journal_drops_recap_fetches_queued_for_old_cards(page, tmp_path, ccrider_db):
+    # Search-clear and "Organize into topics" re-render the journal. Recaps still queued for the
+    # cards that were replaced must not delay the recaps of the cards now on screen.
+    for i in range(24):
+        add_session(ccrider_db, f"s{i}", f"/Users/x/Code/project{i:02d}", f"2026-07-08 00:{i:02d}:00")
+        add_message(ccrider_db, f"s{i}", "user", f"task {i}", sequence=1)
+
+    def one_second_recap_runner(prompt):
+        time.sleep(1)
+        return "ONELINE: full recap text\nDETAIL: full recap text"
+
+    server, base_url = _start_server_with_recap_runner(tmp_path, ccrider_db, one_second_recap_runner)
+    try:
+        page.goto(base_url)
+        page.locator(".project").first.wait_for()
+        page.evaluate("loadJournal()")
+        page.wait_for_function(
+            "document.querySelector('.project .meta')?.textContent.includes('full recap text')",
+            timeout=3000,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()

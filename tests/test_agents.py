@@ -4,11 +4,13 @@ import pytest
 
 from reconvene.agents import (
     AGENTS,
+    agent_label,
     extra_args_for,
     fresh_argv,
     get_agent,
     headless_argv,
     installed_agents,
+    is_supported,
     native_session_id,
     resume_argv,
     transcript_path,
@@ -119,3 +121,18 @@ def test_installed_agents_uses_which():
         "codex": False,
         "antigravity": True,
     }
+
+
+def test_agent_label_uses_registry_label_or_capitalized_provider():
+    assert agent_label("codex") == "Codex"
+    assert agent_label("antigravity") == "Antigravity"
+    assert agent_label("copilot") == "Copilot"
+
+
+def test_is_supported_only_for_registered_agents():
+    assert is_supported("claude") and is_supported("antigravity")
+    assert not is_supported("copilot")
+
+
+def test_transcript_path_unsupported_provider_is_none(tmp_path):
+    assert transcript_path(make_session("abc", "copilot"), tmp_path) is None

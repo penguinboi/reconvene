@@ -1,5 +1,6 @@
 # ABOUTME: Tests for the local HTTP server — routes tested via real HTTP requests
 # ABOUTME: against a server instance running on a random free port in a background thread.
+import http.client
 import json
 import threading
 import urllib.request
@@ -8,7 +9,7 @@ from urllib.error import HTTPError
 import pytest
 
 from reconvene.config import Config
-from reconvene.web.server import serve
+from reconvene.web.server import REQUEST_READ_TIMEOUT_SECONDS, serve
 from tests.conftest import add_session, add_message
 
 
@@ -778,3 +779,99 @@ def test_settings_saves_agent_extra_args(agent_server):
         cfg = json.loads(resp.read())["config"]
     assert cfg["codex_extra_args"] == "--full-auto"
     assert cfg["antigravity_extra_args"] == "--yolo"
+
+
+def _raw_post(base_url, path, body=b"", content_length=None):
+    host, port = base_url[len("http://"):].split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=5)
+    try:
+        conn.putrequest("POST", path)
+        conn.putheader("Content-Length", str(len(body)) if content_length is None else content_length)
+        conn.endheaders(body)
+        resp = conn.getresponse()
+        return resp.status, json.loads(resp.read())
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("path", ["/api/resume/r1", "/api/settings"])
+@pytest.mark.parametrize("body", [b"{not json", b"[]", b'"x"', b"3", b"null", b"\xff\xfe"])
+def test_post_body_that_is_not_a_json_object_is_400(running_server, path, body):
+    base_url, resumed, _ = running_server
+    status, data = _raw_post(base_url, path, body)
+    assert status == 400
+    assert data == {"error": "request body must be a JSON object"}
+    assert resumed == []
+
+
+@pytest.mark.parametrize("path", ["/api/resume/r1", "/api/settings", "/api/topics/refresh"])
+@pytest.mark.parametrize("content_length", ["abc", "-5"])
+def test_post_with_invalid_content_length_is_400(running_server, path, content_length):
+    base_url, resumed, _ = running_server
+    status, data = _raw_post(base_url, path, b"", content_length=content_length)
+    assert status == 400
+    assert data == {"error": "invalid Content-Length"}
+    assert resumed == []
+
+
+def test_post_body_shorter_than_its_content_length_is_400_after_the_read_timeout(running_server):
+    # A client that promises more bytes than it sends must not hold a handler thread forever.
+    base_url, resumed, _ = running_server
+    host, port = base_url[len("http://"):].split(":")
+    conn = http.client.HTTPConnection(host, int(port), timeout=REQUEST_READ_TIMEOUT_SECONDS + 5)
+    try:
+        conn.putrequest("POST", "/api/resume/r1")
+        conn.putheader("Content-Length", "100")
+        conn.endheaders(b"{}")
+        resp = conn.getresponse()
+        assert resp.status == 400
+        assert json.loads(resp.read()) == {"error": "request body was not fully sent"}
+    finally:
+        conn.close()
+    assert resumed == []
+
+
+@pytest.mark.parametrize("body", [b'{"agent": []}', b'{"agent": {}}', b'{"agent": 3}'])
+def test_resume_with_a_non_string_agent_is_400(running_server, body):
+    base_url, resumed, _ = running_server
+    status, data = _raw_post(base_url, "/api/resume/r1", body)
+    assert status == 400
+    assert data == {"error": "agent must be a string"}
+
+
+def test_sessions_rows_from_unsupported_provider_are_listed_not_resumable(agent_server, ccrider_db):
+    base_url, *_ = agent_server
+    add_session(ccrider_db, "cp1", "/Users/x/Code/myproject", "2026-07-09 00:00:00", message_count=20,
+                provider="copilot")
+    add_message(ccrider_db, "cp1", "user", "copilot thread", sequence=1)
+    with urllib.request.urlopen(f"{base_url}/api/sessions/myproject") as resp:
+        rows = {s["session_id"]: s for s in json.loads(resp.read())["sessions"]}
+    assert rows["cp1"]["provider"] == "copilot"
+    assert rows["cp1"]["agent_label"] == "Copilot"
+    assert rows["cp1"]["resumable"] is False
+    assert rows["r1"]["resumable"] is True
+
+
+def _add_copilot_session(ccrider_db):
+    add_session(ccrider_db, "cp1", "/Users/x/Code/myproject", "2026-07-09 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp1", "user", "copilot thread", sequence=1)
+
+
+@pytest.mark.parametrize("payload", [None, {"agent": "copilot"}])
+def test_resume_unsupported_provider_natively_is_400(agent_server, ccrider_db, payload):
+    base_url, resumed, handed_off, *_ = agent_server
+    _add_copilot_session(ccrider_db)
+    with pytest.raises(HTTPError) as exc:
+        _post_json(f"{base_url}/api/resume/cp1", payload)
+    assert exc.value.code == 400
+    assert json.loads(exc.value.read()) == {
+        "error": "reconvene can't resume Copilot sessions; hand it off to another agent instead"}
+    assert resumed == [] and handed_off == []
+
+
+def test_resume_unsupported_provider_can_hand_off(agent_server, ccrider_db):
+    base_url, resumed, handed_off, *_ = agent_server
+    _add_copilot_session(ccrider_db)
+    assert _post_json(f"{base_url}/api/resume/cp1", {"agent": "claude"}) == (200, {"status": "handed_off"})
+    assert handed_off == [("cp1", "copilot", "claude")]
+    assert resumed == []

@@ -169,8 +169,8 @@ def claude_env(config) -> dict:
 def claude_runner(prompt, config, model=MODEL, timeout=120) -> str:
     env = claude_env(config)
     proc = subprocess.run(
-        ["claude", "-p", "--model", model, prompt],
-        capture_output=True, text=True, env=env, timeout=timeout,
+        ["claude", "-p", "--model", model, "--tools=", prompt],  # no tools: the prompt holds other sessions' text
+        capture_output=True, text=True, env=env, timeout=timeout, stdin=subprocess.DEVNULL,
         cwd=tempfile.gettempdir(),  # not the user's launch cwd — keeps this call out of their project history
     )
     if proc.returncode != 0:

@@ -13,6 +13,30 @@ function showError(message) {
 
 const fullRecaps = new Map(); // project name -> full recap text, populated only once actually fetched
 
+// Card recaps load at most RECAP_FETCH_LIMIT at a time. The browser opens only 6 connections per
+// host, so a journal of 100+ cards would otherwise queue the session picker's requests behind
+// every recap and the picker would appear tens of seconds after the modal opens.
+const RECAP_FETCH_LIMIT = 3;
+const pendingRecapFetches = []; // functions that start one recap fetch and return its promise
+let recapFetchesInFlight = 0;
+
+function queueRecapFetch(startFetch) {
+  pendingRecapFetches.push(startFetch);
+  startQueuedRecapFetches();
+}
+
+function startQueuedRecapFetches() {
+  while (recapFetchesInFlight < RECAP_FETCH_LIMIT && pendingRecapFetches.length > 0) {
+    const startFetch = pendingRecapFetches.shift();
+    recapFetchesInFlight++;
+    // Started inside a promise so a synchronous throw still settles and frees the slot.
+    Promise.resolve().then(startFetch).finally(() => {
+      recapFetchesInFlight--;
+      startQueuedRecapFetches();
+    });
+  }
+}
+
 // The agents the "Open in" switch offers, in display order: [{name, label, installed}].
 let agentsPromise = null;
 function loadAgents() {
@@ -74,11 +98,18 @@ function renderAgentSwitch(agents) {
 }
 
 // Points the switch at a session: its own agent is the default target.
-function selectSessionAgent(provider) {
+// A session reconvene cannot resume natively defaults to the first installed agent instead.
+function selectSessionAgent(session) {
   const modal = document.getElementById("confirmModal");
-  modal.dataset.provider = provider;
-  modal.dataset.agent = provider;
-  return loadAgents().then(renderAgentSwitch)
+  modal.dataset.provider = session.provider;
+  modal.dataset.agent = session.provider;
+  return loadAgents().then((agents) => {
+    if (!session.resumable) {
+      const firstInstalled = agents.find((a) => a.installed);
+      modal.dataset.agent = firstInstalled ? firstInstalled.name : "";
+    }
+    renderAgentSwitch(agents);
+  })
     .catch((err) => showError(`Couldn't load the agent list: ${err.message}`));
 }
 
@@ -111,7 +142,7 @@ function showConfirmModal(project) {
     .then((data) => {
       if (!data.sessions) return;
       const current = data.sessions.find((s) => s.session_id === modal.dataset.sessionId);
-      if (current) selectSessionAgent(current.provider);
+      if (current) selectSessionAgent(current);
       if (!isGroup && data.sessions.length < 2) return; // one session, real project: nothing to pick
       const hint = document.createElement("div");
       hint.className = "session-hint";
@@ -122,13 +153,13 @@ function showConfirmModal(project) {
         row.className = "session-row";
         if (s.session_id === modal.dataset.sessionId) row.classList.add("selected");
         const badge = document.createElement("span");
-        badge.className = `agent-badge agent-${s.provider}`;
+        badge.className = `agent-badge ${s.resumable ? `agent-${s.provider}` : "agent-unknown"}`;
         badge.textContent = s.agent_label;
         row.append(badge, `${s.relative} · ${s.message_count} msgs · ${s.first_msg}`);
         row.addEventListener("click", () => {
           if (modal.dataset.working === "1") return; // locked during a handoff
           modal.dataset.sessionId = s.session_id;
-          selectSessionAgent(s.provider);
+          selectSessionAgent(s);
           list.querySelectorAll(".session-row.selected")
             .forEach((n) => n.classList.remove("selected"));
           row.classList.add("selected");
@@ -149,6 +180,7 @@ async function loadJournal() {
   const data = await res.json();
   const el = document.getElementById("journal");
   el.innerHTML = "";
+  pendingRecapFetches.length = 0; // recaps for the cards just removed; in-flight ones finish
   el.classList.remove("placeholder");
 
   if (data.real.length === 0) {
@@ -205,7 +237,7 @@ async function loadJournal() {
     div.appendChild(metaEl);
     div.addEventListener("click", () => showConfirmModal(project));
     el.appendChild(div);
-    fetch(`/api/recap/${encodeURIComponent(project.name)}`)
+    queueRecapFetch(() => fetch(`/api/recap/${encodeURIComponent(project.name)}`)
       .then((r) => r.json())
       .then((recap) => {
         metaEl.textContent = recap.excerpt;
@@ -215,7 +247,7 @@ async function loadJournal() {
           document.getElementById("modalFullRecap").textContent = recap.full;
         }
       })
-      .catch((err) => console.error(`Failed to fetch recap for ${project.name}:`, err));
+      .catch((err) => console.error(`Failed to fetch recap for ${project.name}:`, err)));
   }
 }
 
@@ -328,6 +360,7 @@ function snippetNode(snippet) {
 function renderResults(results, q) {
   const el = document.getElementById("journal");
   el.innerHTML = "";
+  pendingRecapFetches.length = 0; // recaps for the cards just removed; in-flight ones finish
   el.classList.remove("placeholder");
   if (results.length === 0) {
     el.classList.add("placeholder");
@@ -379,4 +412,6 @@ function showSessionModal(hit) {
     .catch(() => { loading.textContent = ""; });
 }
 
+// Fetched up front so the "Open in" switch never waits for it behind the session list.
+loadAgents().catch((err) => console.error("Failed to fetch agents:", err));
 loadJournal();
