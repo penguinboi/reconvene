@@ -104,6 +104,8 @@ function selectSessionAgent(session) {
   modal.dataset.provider = session.provider;
   modal.dataset.agent = session.provider;
   return loadAgents().then((agents) => {
+    // The window may have moved on to another session while the agent list loaded.
+    if (modal.dataset.sessionId !== session.session_id) return;
     if (!session.resumable) {
       const firstInstalled = agents.find((a) => a.installed);
       modal.dataset.agent = firstInstalled ? firstInstalled.name : "";
@@ -404,7 +406,8 @@ function showSessionModal(hit) {
   modal.dataset.projectName = hit.project;
   document.getElementById("modalSessions").innerHTML = "";
   sessionListRequest++; // a project window's list still in flight must not land in this one
-  clearAgentSwitch(); // a search hit carries no agent, so it resumes natively
+  clearAgentSwitch();
+  selectSessionAgent(hit);
   modal.classList.remove("hidden");
   // Fetch the per-session recap and fill it in below the snippet (guard against a stale response if
   // the user has since opened a different session's modal).

@@ -777,3 +777,92 @@ def test_late_session_list_does_not_land_in_a_different_projects_window(page, e2
     page.wait_for_timeout(100)  # let the late response's handler run
     assert page.locator(".session-row", has_text="alpha task").count() == 0
     assert page.locator(".session-row").count() == 2
+
+
+def test_search_result_modal_offers_the_agent_switch(page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, _, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cx_hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", provider="codex")
+    add_message(ccrider_db, "cx_hit", "user", "tune the synology nas raid", sequence=1)
+    page.goto(base_url)
+    page.fill("#searchBox", "synology")
+    page.locator(".search-hit").first.click()
+    page.locator("#modalAgentSwitch button").first.wait_for()
+    assert page.locator("#modalAgentSwitch button.selected").get_attribute("data-agent") == "codex"
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Codex"
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert resumed == ["cx_hit"]
+
+
+def test_search_result_for_unsupported_agent_hands_off(page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp_hit", "user", "tune the synology nas raid", sequence=1)
+    page.goto(base_url)
+    page.fill("#searchBox", "synology")
+    page.locator(".search-hit").first.click()
+    page.locator("#modalAgentSwitch button").first.wait_for()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert handoffs == [("cp_hit", "claude")]
+    assert resumed == []
+
+
+def test_late_agent_list_does_not_retarget_a_different_window(page, e2e_server_with_handoff, ccrider_db):
+    # The agent list loads once and every window waits on it. A window that was closed before
+    # it arrived must not set the Open-in target of the window that replaced it.
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_a", "/Users/x/Code/copilotproj", "2026-07-09 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp_a", "user", "copilot work", sequence=1)
+    add_session(ccrider_db, "cx_b", "/Users/x/Code/codexproj", "2026-07-08 00:00:00", provider="codex")
+    add_message(ccrider_db, "cx_b", "user", "codex work", sequence=1)
+    held_agents, held_b = [], []
+    page.route("**/api/agents", lambda route: held_agents.append(route))
+    page.route("**/api/sessions/codexproj", lambda route: held_b.append(route))
+    page.goto(base_url)
+    with page.expect_response("**/api/sessions/copilotproj"):
+        page.locator(".project", has_text="copilotproj").click()
+    page.locator("#modalCancel").click()
+    page.locator(".project", has_text="codexproj").click()
+    while not held_b:
+        page.wait_for_timeout(20)
+
+    with page.expect_response("**/api/agents"):
+        held_agents[0].continue_()
+    page.wait_for_timeout(100)  # let the waiting continuations run
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    page.wait_for_timeout(200)
+    assert handoffs == []
+    assert resumed == ["cx_b"]
+
+
+def test_long_recap_does_not_push_session_rows_out_of_view(page, tmp_path, ccrider_db):
+    # A 600-word recap used to fill the whole modal body, so the session rows started below the
+    # fold. The recap gets its own capped, scrollable box and the first rows stay on screen.
+    for i in range(30):
+        add_session(ccrider_db, f"long{i}", "/Users/x/Code/longrecap", f"2026-07-08 00:{i:02d}:00")
+        add_message(ccrider_db, f"long{i}", "user", f"task {i}", sequence=1)
+    paragraph = "This paragraph describes a long stretch of work on the project in detail. " * 6
+    long_detail = "\n".join([paragraph] * 12)
+
+    def long_recap_runner(prompt):
+        return f"ONELINE: short line\nDETAIL: {long_detail}"
+
+    server, base_url = _start_server_with_recap_runner(tmp_path, ccrider_db, long_recap_runner)
+    try:
+        page.set_viewport_size({"width": 1200, "height": 700})
+        page.goto(base_url)
+        page.locator(".project .meta", has_text="long stretch of work").wait_for()
+        page.locator(".project").click()
+        page.locator(".session-row").first.wait_for()
+
+        body = page.locator(".modal-body").bounding_box()
+        first_row = page.locator(".session-row").first.bounding_box()
+        assert first_row["y"] + first_row["height"] <= body["y"] + body["height"]
+        assert page.locator(".modal-body").evaluate("el => el.scrollTop") == 0
+        recap = page.locator("#modalFullRecap")
+        assert recap.evaluate("el => el.scrollHeight > el.clientHeight")  # the rest scrolls in place
+    finally:
+        server.shutdown()

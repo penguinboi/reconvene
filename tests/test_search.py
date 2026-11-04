@@ -84,3 +84,10 @@ def test_search_module_empty_query_prints_nothing(ccrider_db):
     with redirect_stdout(buf):
         _search.main(["", str(ccrider_db)])
     assert buf.getvalue() == ""
+
+
+def test_search_hit_carries_the_session_provider(ccrider_db):
+    add_session(ccrider_db, "cp1", "/Users/x/Code/proj", "2026-07-08 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp1", "user", "rename the widget", sequence=1)
+    (hit,) = search_sessions(ccrider_db, "widget")
+    assert hit.provider == "copilot"
