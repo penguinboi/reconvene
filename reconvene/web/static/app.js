@@ -104,6 +104,8 @@ function selectSessionAgent(session) {
   modal.dataset.provider = session.provider;
   modal.dataset.agent = session.provider;
   return loadAgents().then((agents) => {
+    // The window may have moved on to another session while the agent list loaded.
+    if (modal.dataset.sessionId !== session.session_id) return;
     if (!session.resumable) {
       const firstInstalled = agents.find((a) => a.installed);
       modal.dataset.agent = firstInstalled ? firstInstalled.name : "";
