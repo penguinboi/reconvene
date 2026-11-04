@@ -244,6 +244,9 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                         "message_count": h.message_count,
                         "hits": h.hits,
                         "snippet": h.snippet,
+                        "provider": h.provider,
+                        "agent_label": agent_label(h.provider),
+                        "resumable": is_supported(h.provider),
                     }
                     for h in hits
                 ]})

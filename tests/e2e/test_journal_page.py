@@ -756,6 +756,65 @@ def test_modal_controls_stay_visible_above_a_long_session_list(page, e2e_server_
     assert box["y"] + box["height"] <= 700
 
 
+def test_search_result_modal_offers_the_agent_switch(page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, _, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cx_hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", provider="codex")
+    add_message(ccrider_db, "cx_hit", "user", "tune the synology nas raid", sequence=1)
+    page.goto(base_url)
+    page.fill("#searchBox", "synology")
+    page.locator(".search-hit").first.click()
+    page.locator("#modalAgentSwitch button").first.wait_for()
+    assert page.locator("#modalAgentSwitch button.selected").get_attribute("data-agent") == "codex"
+    assert page.locator("#modalConfirm").inner_text() == "Resume in Codex"
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert resumed == ["cx_hit"]
+
+
+def test_search_result_for_unsupported_agent_hands_off(page, e2e_server_with_handoff, ccrider_db):
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_hit", "/Users/x/Code/homelab", "2026-07-07 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp_hit", "user", "tune the synology nas raid", sequence=1)
+    page.goto(base_url)
+    page.fill("#searchBox", "synology")
+    page.locator(".search-hit").first.click()
+    page.locator("#modalAgentSwitch button").first.wait_for()
+    assert page.locator("#modalConfirm").inner_text() == "Hand off to Claude"
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    assert handoffs == [("cp_hit", "claude")]
+    assert resumed == []
+
+
+def test_late_agent_list_does_not_retarget_a_different_window(page, e2e_server_with_handoff, ccrider_db):
+    # The agent list loads once and every window waits on it. A window that was closed before
+    # it arrived must not set the Open-in target of the window that replaced it.
+    base_url, resumed, handoffs, _ = e2e_server_with_handoff
+    add_session(ccrider_db, "cp_a", "/Users/x/Code/copilotproj", "2026-07-09 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp_a", "user", "copilot work", sequence=1)
+    add_session(ccrider_db, "cx_b", "/Users/x/Code/codexproj", "2026-07-08 00:00:00", provider="codex")
+    add_message(ccrider_db, "cx_b", "user", "codex work", sequence=1)
+    held_agents, held_b = [], []
+    page.route("**/api/agents", lambda route: held_agents.append(route))
+    page.route("**/api/sessions/codexproj", lambda route: held_b.append(route))
+    page.goto(base_url)
+    with page.expect_response("**/api/sessions/copilotproj"):
+        page.locator(".project", has_text="copilotproj").click()
+    page.locator("#modalCancel").click()
+    page.locator(".project", has_text="codexproj").click()
+    while not held_b:
+        page.wait_for_timeout(20)
+
+    with page.expect_response("**/api/agents"):
+        held_agents[0].continue_()
+    page.wait_for_timeout(100)  # let the waiting continuations run
+    page.locator("#modalConfirm").click()
+    page.locator("#confirmModal.hidden").wait_for(state="attached")
+    page.wait_for_timeout(200)
+    assert handoffs == []
+    assert resumed == ["cx_b"]
+
+
 def test_long_recap_does_not_push_session_rows_out_of_view(page, tmp_path, ccrider_db):
     # A 600-word recap used to fill the whole modal body, so the session rows started below the
     # fold. The recap gets its own capped, scrollable box and the first rows stay on screen.
