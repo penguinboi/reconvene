@@ -13,7 +13,7 @@ from ..cluster import TopicAuthError, TopicCache, load_topic_lookup, organize, u
 from ..config import save_config
 from ..db import find_session, load_sessions
 from ..journal import abbreviate_home, build_journal, build_settings_projects, recency_bucket, relative_time
-from ..recap import RecapCache, ensure_recaps, ensure_session_recap, excerpt, first_user_message
+from ..recap import RecapCache, ensure_recaps, ensure_session_recap, excerpt, first_user_message, first_user_messages
 from ..search import search_sessions
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -166,13 +166,14 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 if project is None:
                     self._send_json(404, {"error": f"no project named {name!r}"})
                     return
+                first_msgs = first_user_messages(db_path, [s.session_id for s in project.sessions])
                 self._send_json(200, {"sessions": [
                     {
                         "session_id": s.session_id,
                         "updated_at": s.updated_at,
                         "relative": relative_time(s.updated_at),
                         "message_count": s.message_count,
-                        "first_msg": first_user_message(db_path, s.session_id),
+                        "first_msg": first_msgs[s.session_id],
                         "provider": s.provider,
                         "agent_label": get_agent(s.provider).label,
                     }

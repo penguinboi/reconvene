@@ -1,6 +1,7 @@
 # ABOUTME: Root-launch detection and sticky topic assignments for "loose" sessions.
 # ABOUTME: A root = a session path that path-prefixes >=3 other session paths (worktrees excluded).
 import sqlite3
+from bisect import bisect_left
 from pathlib import Path
 
 from .constants import NOISE_MESSAGE_FLOOR, WORKTREE_MARKERS
@@ -10,17 +11,20 @@ FALLBACK_SUFFIX = " (loose sessions)"
 
 
 def detect_roots(paths) -> set[str]:
-    norm = {p.rstrip("/") for p in paths if p and p.rstrip("/")}
+    norm = sorted({p.rstrip("/") for p in paths if p and p.rstrip("/")})
     roots = set()
     for cand in norm:
-        prefix = cand + "/"
-        children = {
-            p for p in norm
-            if p != cand and p.startswith(prefix)
-            and not any(m in p[len(cand):] for m in WORKTREE_MARKERS)
-        }
-        if len(children) >= 3:
-            roots.add(cand)
+        # Every path starting with cand + "/" sits in one contiguous run of the sorted list;
+        # "0" is the character after "/", so it bounds the run.
+        start = bisect_left(norm, cand + "/")
+        end = bisect_left(norm, cand + "0")
+        children = 0
+        for p in norm[start:end]:
+            if not any(m in p[len(cand):] for m in WORKTREE_MARKERS):
+                children += 1
+                if children >= 3:
+                    roots.add(cand)
+                    break
     return roots
 
 

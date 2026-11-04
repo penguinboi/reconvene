@@ -7,6 +7,7 @@ from reconvene.cluster import (
     load_topic_lookup, organize, parse_assignments,
 )
 from reconvene.config import Config
+from reconvene.constants import WORKTREE_MARKERS
 from tests.conftest import add_session, add_message
 
 
@@ -105,3 +106,51 @@ def test_organize_empty_input_is_zero_and_no_claude_call(tmp_path):
                     runner=lambda p: calls.append(p) or "") == 0
     assert calls == []
     cache.close()
+
+
+def _reference_detect_roots(paths):
+    norm = {p.rstrip("/") for p in paths if p and p.rstrip("/")}
+    roots = set()
+    for cand in norm:
+        prefix = cand + "/"
+        children = {
+            p for p in norm
+            if p != cand and p.startswith(prefix)
+            and not any(m in p[len(cand):] for m in WORKTREE_MARKERS)
+        }
+        if len(children) >= 3:
+            roots.add(cand)
+    return roots
+
+
+@pytest.mark.parametrize("paths", [
+    [],
+    ["", "/", "//"],
+    ["/u/Code/", "/u/Code/a/", "/u/Code/b", "/u/Code/c"],
+    ["/u", "/u/a", "/u/a/x", "/u/a/y", "/u/a/z", "/u/b"],
+    ["/a/b", "/a/bc", "/a/bd", "/a/be", "/a/b/c"],
+    ["/a/b", "/a/b/1", "/a/b/2", "/a/bx", "/a/b-1"],
+    ["/r", "/r/a", "/r/b"],
+    ["/r", "/r/a", "/r/b", "/r/c"],
+    ["/u/Code/foo", "/u/Code/foo/.claude-worktrees/a", "/u/Code/foo/.worktrees/b",
+     "/u/Code/foo/x--claude-worktrees", "/u/Code/foo/real"],
+    ["/u/Code/foo", "/u/Code/foo/a", "/u/Code/foo/b", "/u/Code/foo/c/.worktrees/d"],
+    ["/u/.worktrees/p", "/u/.worktrees/p/a", "/u/.worktrees/p/b", "/u/.worktrees/p/c"],
+])
+def test_detect_roots_matches_reference_on_hand_written_cases(paths):
+    assert detect_roots(paths) == _reference_detect_roots(paths)
+
+
+def test_detect_roots_matches_reference_on_random_paths():
+    import random
+    rng = random.Random(1774)
+    parts = ["a", "b", "bc", "b-1", "Code", ".claude-worktrees", ".worktrees", "x--claude-worktrees", "z"]
+    for _ in range(5):
+        paths = []
+        for _ in range(1000):
+            path = "/" + "/".join(rng.choice(parts) for _ in range(rng.randint(0, 5)))
+            if rng.random() < 0.15:
+                path += "/"
+            paths.append(path)
+        paths.append("")
+        assert detect_roots(paths) == _reference_detect_roots(paths)

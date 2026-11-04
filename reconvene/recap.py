@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .constants import MODEL, RECAP_CACHE_DB, RECAP_CONCURRENCY, RECENT_SESSIONS_FOR_RECAP
-from .db import session_messages
+from .db import first_user_bodies, session_messages
 
 
 def signature(sessions) -> str:
@@ -140,6 +140,14 @@ def first_user_message(db_path, session_id, limit=90) -> str:
     msgs = session_messages(db_path, session_id)
     first_user = next((body for sender, body in msgs if "user" in sender.lower()), "")
     return first_user.replace("\n", " ").strip()[:limit]
+
+
+def first_user_messages(db_path, session_ids, limit=90) -> dict[str, str]:
+    # Same result as first_user_message per id, over one connection.
+    return {
+        sid: body.replace("\n", " ").strip()[:limit]
+        for sid, body in first_user_bodies(db_path, session_ids).items()
+    }
 
 
 def derive_recap(project, db_path) -> tuple[str, str]:
