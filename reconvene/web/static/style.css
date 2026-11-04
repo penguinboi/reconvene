@@ -316,6 +316,12 @@ table td, table th {
   color: var(--text-muted);
 }
 
+/* A full recap runs to 600 words; capped so the session rows below it start on screen. */
+#modalFullRecap {
+  max-height: 12em;
+  overflow-y: auto;
+}
+
 /* Must stay last: .project:hover/button:hover are defined above and win any
    specificity tie by source order, so this override has to come after them. */
 @media (prefers-reduced-motion: reduce) {
