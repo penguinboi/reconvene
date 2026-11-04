@@ -340,3 +340,23 @@ def test_summarize_and_export_never_read_inherited_stdin(tmp_path):
     summarize("claude", "P", Config(), runner=runner)
     export_session("abc", tmp_path / "h", runner=runner)
     assert [c[1]["stdin"] for c in runner.calls] == [subprocess.DEVNULL, subprocess.DEVNULL]
+
+
+def test_handoff_from_unsupported_provider_names_it_and_omits_transcript(ccrider_db, tmp_path):
+    runner, launched, launcher = _handoff_env(ccrider_db, tmp_path, "SUMMARY TEXT")
+    perform_handoff(_session("copilot"), "claude", Config(), ccrider_db, runner=runner,
+                    launcher=launcher, path_exists=lambda p: True,
+                    home=tmp_path, handoff_dir=tmp_path / "h")
+    prompt = launched[0][0][-1]
+    assert "from a Copilot session" in prompt
+    assert "Raw Copilot transcript: not found" in prompt
+    assert "None" not in prompt
+
+
+def test_handoff_from_unsupported_provider_to_itself_is_rejected(ccrider_db, tmp_path):
+    runner, launched, launcher = _handoff_env(ccrider_db, tmp_path)
+    with pytest.raises(ValueError):
+        perform_handoff(_session("copilot"), "copilot", Config(), ccrider_db, runner=runner,
+                        launcher=launcher, path_exists=lambda p: True,
+                        home=tmp_path, handoff_dir=tmp_path / "h")
+    assert runner.calls == []

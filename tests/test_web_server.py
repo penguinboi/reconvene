@@ -837,4 +837,41 @@ def test_resume_with_a_non_string_agent_is_400(running_server, body):
     status, data = _raw_post(base_url, "/api/resume/r1", body)
     assert status == 400
     assert data == {"error": "agent must be a string"}
+
+
+def test_sessions_rows_from_unsupported_provider_are_listed_not_resumable(agent_server, ccrider_db):
+    base_url, *_ = agent_server
+    add_session(ccrider_db, "cp1", "/Users/x/Code/myproject", "2026-07-09 00:00:00", message_count=20,
+                provider="copilot")
+    add_message(ccrider_db, "cp1", "user", "copilot thread", sequence=1)
+    with urllib.request.urlopen(f"{base_url}/api/sessions/myproject") as resp:
+        rows = {s["session_id"]: s for s in json.loads(resp.read())["sessions"]}
+    assert rows["cp1"]["provider"] == "copilot"
+    assert rows["cp1"]["agent_label"] == "Copilot"
+    assert rows["cp1"]["resumable"] is False
+    assert rows["r1"]["resumable"] is True
+
+
+def _add_copilot_session(ccrider_db):
+    add_session(ccrider_db, "cp1", "/Users/x/Code/myproject", "2026-07-09 00:00:00", provider="copilot")
+    add_message(ccrider_db, "cp1", "user", "copilot thread", sequence=1)
+
+
+@pytest.mark.parametrize("payload", [None, {"agent": "copilot"}])
+def test_resume_unsupported_provider_natively_is_400(agent_server, ccrider_db, payload):
+    base_url, resumed, handed_off, *_ = agent_server
+    _add_copilot_session(ccrider_db)
+    with pytest.raises(HTTPError) as exc:
+        _post_json(f"{base_url}/api/resume/cp1", payload)
+    assert exc.value.code == 400
+    assert json.loads(exc.value.read()) == {
+        "error": "reconvene can't resume Copilot sessions; hand it off to another agent instead"}
+    assert resumed == [] and handed_off == []
+
+
+def test_resume_unsupported_provider_can_hand_off(agent_server, ccrider_db):
+    base_url, resumed, handed_off, *_ = agent_server
+    _add_copilot_session(ccrider_db)
+    assert _post_json(f"{base_url}/api/resume/cp1", {"agent": "claude"}) == (200, {"status": "handed_off"})
+    assert handed_off == [("cp1", "copilot", "claude")]
     assert resumed == []

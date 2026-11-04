@@ -31,6 +31,22 @@ def get_agent(name: str) -> Agent:
         raise ValueError(f"unknown agent {name!r}") from None
 
 
+def is_supported(provider: str) -> bool:
+    return provider in AGENTS
+
+
+def agent_label(provider: str) -> str:
+    """The display name for a session's provider, including agents reconvene cannot drive."""
+    return AGENTS[provider].label if is_supported(provider) else provider.capitalize()
+
+
+def require_resumable(provider: str) -> None:
+    if not is_supported(provider):
+        raise ValueError(
+            f"reconvene can't resume {agent_label(provider)} sessions; hand it off to another agent instead"
+        )
+
+
 def extra_args_for(name: str, config) -> list[str]:
     """The user's configured extra flags for one agent, split shell-style."""
     get_agent(name)
@@ -49,6 +65,7 @@ def native_session_id(session) -> str:
 
 
 def resume_argv(session, prompt: str, extra: list[str]) -> list[str]:
+    require_resumable(session.provider)
     binary = get_agent(session.provider).binary
     session_id = native_session_id(session)
     if session.provider == "claude":
@@ -85,7 +102,9 @@ _TRANSCRIPT_GLOBS = {
 
 
 def transcript_path(session, home: Path) -> Path | None:
-    pattern = _TRANSCRIPT_GLOBS[get_agent(session.provider).name].format(id=session.session_id)
+    if not is_supported(session.provider):
+        return None
+    pattern = _TRANSCRIPT_GLOBS[session.provider].format(id=session.session_id)
     return next(iter(sorted(Path(home).glob(pattern))), None)
 
 
