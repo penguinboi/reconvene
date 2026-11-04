@@ -29,7 +29,8 @@ function startQueuedRecapFetches() {
   while (recapFetchesInFlight < RECAP_FETCH_LIMIT && pendingRecapFetches.length > 0) {
     const startFetch = pendingRecapFetches.shift();
     recapFetchesInFlight++;
-    startFetch().finally(() => {
+    // Started inside a promise so a synchronous throw still settles and frees the slot.
+    Promise.resolve().then(startFetch).finally(() => {
       recapFetchesInFlight--;
       startQueuedRecapFetches();
     });
@@ -172,6 +173,7 @@ async function loadJournal() {
   const data = await res.json();
   const el = document.getElementById("journal");
   el.innerHTML = "";
+  pendingRecapFetches.length = 0; // recaps for the cards just removed; in-flight ones finish
   el.classList.remove("placeholder");
 
   if (data.real.length === 0) {
@@ -351,6 +353,7 @@ function snippetNode(snippet) {
 function renderResults(results, q) {
   const el = document.getElementById("journal");
   el.innerHTML = "";
+  pendingRecapFetches.length = 0; // recaps for the cards just removed; in-flight ones finish
   el.classList.remove("placeholder");
   if (results.length === 0) {
     el.classList.add("placeholder");
