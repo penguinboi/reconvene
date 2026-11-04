@@ -829,3 +829,12 @@ def test_post_body_shorter_than_its_content_length_is_400_after_the_read_timeout
     finally:
         conn.close()
     assert resumed == []
+
+
+@pytest.mark.parametrize("body", [b'{"agent": []}', b'{"agent": {}}', b'{"agent": 3}'])
+def test_resume_with_a_non_string_agent_is_400(running_server, body):
+    base_url, resumed, _ = running_server
+    status, data = _raw_post(base_url, "/api/resume/r1", body)
+    assert status == 400
+    assert data == {"error": "agent must be a string"}
+    assert resumed == []

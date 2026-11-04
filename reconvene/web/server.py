@@ -260,6 +260,9 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
                 except ValueError as e:
                     self._send_json(400, {"error": str(e)})
                     return
+                if target is not None and not isinstance(target, str):
+                    self._send_json(400, {"error": "agent must be a string"})
+                    return
                 if target is not None and target not in AGENTS:
                     self._send_json(400, {"error": f"unknown agent {target!r}"})
                     return
