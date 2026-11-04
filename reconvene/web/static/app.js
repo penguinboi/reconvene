@@ -13,6 +13,29 @@ function showError(message) {
 
 const fullRecaps = new Map(); // project name -> full recap text, populated only once actually fetched
 
+// Card recaps load at most RECAP_FETCH_LIMIT at a time. The browser opens only 6 connections per
+// host, so a journal of 100+ cards would otherwise queue the session picker's requests behind
+// every recap and the picker would appear tens of seconds after the modal opens.
+const RECAP_FETCH_LIMIT = 3;
+const pendingRecapFetches = []; // functions that start one recap fetch and return its promise
+let recapFetchesInFlight = 0;
+
+function queueRecapFetch(startFetch) {
+  pendingRecapFetches.push(startFetch);
+  startQueuedRecapFetches();
+}
+
+function startQueuedRecapFetches() {
+  while (recapFetchesInFlight < RECAP_FETCH_LIMIT && pendingRecapFetches.length > 0) {
+    const startFetch = pendingRecapFetches.shift();
+    recapFetchesInFlight++;
+    startFetch().finally(() => {
+      recapFetchesInFlight--;
+      startQueuedRecapFetches();
+    });
+  }
+}
+
 // The agents the "Open in" switch offers, in display order: [{name, label, installed}].
 let agentsPromise = null;
 function loadAgents() {
@@ -205,7 +228,7 @@ async function loadJournal() {
     div.appendChild(metaEl);
     div.addEventListener("click", () => showConfirmModal(project));
     el.appendChild(div);
-    fetch(`/api/recap/${encodeURIComponent(project.name)}`)
+    queueRecapFetch(() => fetch(`/api/recap/${encodeURIComponent(project.name)}`)
       .then((r) => r.json())
       .then((recap) => {
         metaEl.textContent = recap.excerpt;
@@ -215,7 +238,7 @@ async function loadJournal() {
           document.getElementById("modalFullRecap").textContent = recap.full;
         }
       })
-      .catch((err) => console.error(`Failed to fetch recap for ${project.name}:`, err));
+      .catch((err) => console.error(`Failed to fetch recap for ${project.name}:`, err)));
   }
 }
 
@@ -379,4 +402,6 @@ function showSessionModal(hit) {
     .catch(() => { loading.textContent = ""; });
 }
 
+// Fetched up front so the "Open in" switch never waits for it behind the session list.
+loadAgents().catch((err) => console.error("Failed to fetch agents:", err));
 loadJournal();
