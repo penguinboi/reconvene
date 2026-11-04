@@ -30,6 +30,24 @@ def _json_object(body: bytes) -> dict:
     return data
 
 
+SETTINGS_LIST_FIELDS = ("bot_names", "hidden_names", "hidden_path_substrings")
+SETTINGS_TEXT_FIELDS = ("recap_auth_mode", "terminal_app", "claude_extra_args", "codex_extra_args",
+                        "antigravity_extra_args")
+
+
+def _check_settings_types(data: dict) -> None:
+    # Checked before any field is applied, so a bad request saves nothing at all.
+    for name in SETTINGS_LIST_FIELDS:
+        if name in data and not (isinstance(data[name], list)
+                                 and all(isinstance(v, str) for v in data[name])):
+            raise ValueError(f"{name} must be a list of strings")
+    for name in SETTINGS_TEXT_FIELDS:
+        if name in data and not isinstance(data[name], str):
+            raise ValueError(f"{name} must be a string")
+    if data.get("api_key") is not None and not isinstance(data["api_key"], str):
+        raise ValueError("api_key must be a string or null")
+
+
 def _redacted_config(config):
     # Never send the API key to the browser -- only whether one is set. Callers that persist
     # the config still use config.to_dict() directly, which keeps the real value.
@@ -291,6 +309,7 @@ def make_handler(config, db_path, cache_path, config_path, resumer, recap_runner
             if path == "/api/settings":
                 try:
                     data = _json_object(body)
+                    _check_settings_types(data)
                 except ValueError as e:
                     self._send_json(400, {"error": str(e)})
                     return
