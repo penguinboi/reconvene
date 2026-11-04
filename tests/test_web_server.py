@@ -875,3 +875,24 @@ def test_resume_unsupported_provider_can_hand_off(agent_server, ccrider_db):
     assert _post_json(f"{base_url}/api/resume/cp1", {"agent": "claude"}) == (200, {"status": "handed_off"})
     assert handed_off == [("cp1", "copilot", "claude")]
     assert resumed == []
+
+
+@pytest.mark.parametrize("payload, field", [
+    ({"bot_names": 5}, "bot_names"),
+    ({"bot_names": "abc"}, "bot_names"),
+    ({"hidden_names": [1]}, "hidden_names"),
+    ({"hidden_path_substrings": None}, "hidden_path_substrings"),
+    ({"recap_auth_mode": 5}, "recap_auth_mode"),
+    ({"api_key": 5}, "api_key"),
+    ({"terminal_app": ["iTerm2"]}, "terminal_app"),
+    ({"claude_extra_args": ["--x"]}, "claude_extra_args"),
+    ({"bot_names": ["myproject"], "codex_extra_args": 7}, "codex_extra_args"),
+])
+def test_settings_post_with_a_wrong_typed_field_is_400_and_changes_nothing(
+        running_server, tmp_path, payload, field):
+    base_url, _, config = running_server
+    status, data = _raw_post(base_url, "/api/settings", json.dumps(payload).encode())
+    assert status == 400
+    assert field in data["error"]
+    assert config == Config()
+    assert not (tmp_path / "config.json").exists()
