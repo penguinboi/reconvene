@@ -111,8 +111,9 @@ def ensure_session_recap(session, db_path, cache, config, runner=None) -> tuple[
         oneline, full = derive_session_recap(session, db_path)
     else:
         run = runner or (lambda prompt: claude_runner(prompt, config))
+        prompt = build_session_prompt(session, db_path)
         try:
-            oneline, full = parse_recap(run(build_session_prompt(session, db_path)))
+            oneline, full = parse_recap(run(prompt))
         except Exception as e:
             # Shown but not cached, so a later successful run replaces the basic summary.
             print(f"reconvene: recap for session {session.session_id!r} failed ({e}); "
