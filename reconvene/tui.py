@@ -167,7 +167,7 @@ def run_tui(config, db_path, cache_path, config_path, show_bots=False, *,
             resumer(session, config)
         except ValueError as e:
             # An agent reconvene can't resume (e.g. Copilot). Handoff lives in the web page only.
-            print(f"reconvene: {e}. Run reconvene and choose Web view to hand it off.",
+            print(f"{e}. Run reconvene and choose Web view to do that.",
                   file=sys.stderr)
             return 1
         return 0

@@ -373,5 +373,6 @@ def test_run_tui_unsupported_agent_prints_message_instead_of_traceback(tmp_path,
     assert rc == 1
     assert launched == []
     err = capsys.readouterr().err
-    assert "reconvene: reconvene can't resume Copilot sessions" in err
+    assert err.strip() == ("reconvene can't resume Copilot sessions; hand it off to another agent "
+                           "instead. Run reconvene and choose Web view to do that.")
     assert "Traceback" not in err
