@@ -212,6 +212,26 @@ def test_ensure_session_recap_none_auth_derives_without_runner(tmp_path, ccrider
     cache.close()
 
 
+def test_ensure_session_recap_falls_back_when_claude_fails_and_does_not_cache_it(
+        tmp_path, ccrider_db, capsys):
+    from tests.conftest import add_session, add_message
+    add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00", message_count=12)
+    add_message(ccrider_db, "s1", "user", "tune the nas raid", sequence=1)
+    from reconvene.recap import ensure_session_recap
+    def failing_runner(prompt):
+        raise FileNotFoundError(2, "No such file or directory", "claude")
+    cache = RecapCache(str(tmp_path / "r.db"))
+    one, full = ensure_session_recap(_session(), str(ccrider_db), cache, Config(),
+                                     runner=failing_runner)
+    assert "tune the nas raid" in one and "tune the nas raid" in full
+    assert "showing a basic summary instead" in capsys.readouterr().err
+    # The fallback is not cached, so the next successful run replaces it.
+    one, _ = ensure_session_recap(_session(), str(ccrider_db), cache, Config(),
+                                  runner=lambda p: "ONELINE: nas tune-up\nDETAIL: raid work")
+    assert one == "nas tune-up"
+    cache.close()
+
+
 def test_ensure_session_recap_key_does_not_collide_with_project(tmp_path, ccrider_db):
     from tests.conftest import add_session, add_message
     add_session(ccrider_db, "s1", "/Users/x/Code/myproject", "2026-07-08 10:00:00", message_count=12)
